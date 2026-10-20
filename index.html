@@ -14,7 +14,7 @@
     <!-- FontAwesome Icons CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Font Inter -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         body {
@@ -27,19 +27,38 @@
         img {
             pointer-events: none;
         }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-indigo:focus-within {
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.35);
+        }
+        /* Custom scrollbar for modern feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.8);
+            border-radius: 9999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.8);
+        }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 antialiased min-h-screen">
+<body class="bg-slate-950 text-slate-100 antialiased min-h-screen selection:bg-indigo-500 selection:text-white">
     <div id="root"></div>
 
     <script type="text/babel" data-compact="true">
         const { useState, useEffect, useRef } = React;
 
-        // =========================================================================
-        // TEMPATKAN URL GOOGLE APPS SCRIPT ANDA DI SINI:
-        // Masukkan URL Web App dari langkah Deploy Google Apps Script.
-        // Siswa yang membuka link ini akan langsung otomatis terhubung ke database.
-        // =========================================================================
         const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbztLyZuduyezaFqLLGK8hkg71lsiVxmrYTLEhteNx8ZCKUCabi8s-EIjYdLSYbXsYSy5g/exec";
 
         const DEFAULT_QUESTIONS = [
@@ -76,19 +95,21 @@
             const [role, setRole] = useState('siswa'); // 'siswa' or 'guru'
             const [step, setStep] = useState('login'); // 'login', 'guru_dashboard', 'instructions', 'exam', 'result'
             
-            // Student login state
-            const [student, setStudent] = useState({ name: '', nisn: '', kelas: 'Kelas X', mapel: 'Pancasila & Kewarganegaraan', token: '' });
-            const [loginMethod, setLoginMethod] = useState('token'); // 'token' or 'select'
+            // Student login state (Token-only login)
+            const [student, setStudent] = useState({ name: '', nisn: '', kelas: 'Kelas X', token: '' });
             const [selectedMapel, setSelectedMapel] = useState('');
             const [selectedKelas, setSelectedKelas] = useState('Kelas X');
+            const [loginError, setLoginError] = useState('');
             
             // Teacher login & dashboard state
             const [teacherPass, setTeacherPass] = useState('');
+            const [teacherError, setTeacherError] = useState('');
             const [activeGuruMenu, setActiveGuruMenu] = useState('input_soal'); // 'input_soal', 'daftar_soal', 'hasil_ujian', 'generate_token'
             const [editingQuestion, setEditingQuestion] = useState(null);
             const [deletingQId, setDeletingQId] = useState(null);
             const [filterDaftarMapel, setFilterDaftarMapel] = useState('ALL');
             const [filterDaftarKelas, setFilterDaftarKelas] = useState('ALL');
+            const [copiedTokenMapel, setCopiedTokenMapel] = useState('');
             
             // Database URL state
             const [gasUrl, setGasUrl] = useState(() => {
@@ -287,50 +308,51 @@
             };
 
             const handleTeacherLogin = () => {
+                setTeacherError('');
                 if (teacherPass === 'guru123') {
                     setStep('guru_dashboard');
                     if (gasUrl) fetchResultsFromGas();
                 } else {
-                    alert("Password Guru Salah! Gunakan password bawaan: guru123");
+                    setTeacherError("Password Guru salah! Gunakan password bawaan: guru123");
                 }
             };
 
             const startStudentExam = () => {
-                if (!student.name || !student.nisn) {
-                    alert("Mohon lengkapi Nama Lengkap dan NISN!");
+                setLoginError('');
+                if (!student.name.trim() || !student.nisn.trim()) {
+                    setLoginError("Mohon lengkapi Nama Lengkap dan NISN Siswa!");
                     return;
                 }
 
-                let targetMapel = student.mapel;
+                if (!student.token.trim()) {
+                    setLoginError("Mohon masukkan Token Ujian yang diberikan oleh Guru!");
+                    return;
+                }
 
-                if (loginMethod === 'token') {
-                    if (!student.token) {
-                        alert("Mohon masukkan Token Ujian dari Guru!");
-                        return;
-                    }
-                    const matchedMapel = Object.keys(tokens).find(m => tokens[m].toUpperCase() === student.token.trim().toUpperCase());
-                    if (!matchedMapel) {
-                        alert("Token Ujian Tidak Valid! Silakan tanyakan token aktif kepada Guru.");
-                        return;
-                    }
-                    targetMapel = matchedMapel;
+                // Match entered token with available subject tokens
+                const inputToken = student.token.trim().toUpperCase();
+                const matchedMapel = Object.keys(tokens).find(m => tokens[m].toUpperCase() === inputToken);
+
+                if (!matchedMapel) {
+                    setLoginError("Token Ujian Tidak Valid! Silakan minta token aktif kepada Guru/Pengawas.");
+                    return;
                 }
 
                 const mapelQuestions = questions.filter(q => {
-                    const matchM = !q.mapel || q.mapel.toLowerCase() === targetMapel.toLowerCase();
+                    const matchM = !q.mapel || q.mapel.toLowerCase() === matchedMapel.toLowerCase();
                     const matchK = !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === student.kelas.toLowerCase();
                     return matchM && matchK;
                 });
 
                 if (mapelQuestions.length === 0) {
-                    const mapelOnly = questions.filter(q => !q.mapel || q.mapel.toLowerCase() === targetMapel.toLowerCase());
+                    const mapelOnly = questions.filter(q => !q.mapel || q.mapel.toLowerCase() === matchedMapel.toLowerCase());
                     if (mapelOnly.length === 0) {
-                        alert(`Belum ada soal tersedia untuk Mata Pelajaran "${targetMapel}".`);
+                        setLoginError(`Belum ada soal tersedia di bank soal untuk Mata Pelajaran "${matchedMapel}".`);
                         return;
                     }
                 }
 
-                setSelectedMapel(targetMapel);
+                setSelectedMapel(matchedMapel);
                 setSelectedKelas(student.kelas);
                 setStep('instructions');
             };
@@ -410,19 +432,15 @@
 
             const handleSaveQuestion = async () => {
                 if (!selectedMapelInput) {
-                    alert("Wajib memilih Mata Pelajaran!");
                     return;
                 }
                 if (!selectedKelasInput) {
-                    alert("Wajib memilih Tingkat Kelas!");
                     return;
                 }
                 if (!formQuestion.question.trim()) {
-                    alert("Isi soal/pertanyaan tidak boleh kosong!");
                     return;
                 }
                 if (formQuestion.options.some(opt => !opt.trim())) {
-                    alert("Semua 4 opsi pilihan jawaban (A, B, C, D) wajib diisi!");
                     return;
                 }
 
@@ -450,12 +468,9 @@
                                 ...newQ
                             })
                         });
-                        alert("Berhasil! Soal telah tersimpan di Google Spreadsheet.");
                     } catch (e) {
-                        alert("Soal tersimpan di memori lokal, namun gagal sync ke Google Sheets.");
+                        console.error("Gagal menyimpan ke GS", e);
                     }
-                } else {
-                    alert("Soal berhasil disimpan ke memori lokal!");
                 }
 
                 handleResetFormQuestion();
@@ -477,6 +492,17 @@
                     result += chars.charAt(Math.floor(Math.random() * chars.length));
                 }
                 setTokens({ ...tokens, [mapel]: result });
+            };
+
+            const copyToClipboard = (text, mapel) => {
+                const dummy = document.createElement("input");
+                document.body.appendChild(dummy);
+                dummy.value = text;
+                dummy.select();
+                document.execCommand("copy");
+                document.body.removeChild(dummy);
+                setCopiedTokenMapel(mapel);
+                setTimeout(() => setCopiedTokenMapel(''), 2000);
             };
 
             const handleSaveEditQuestion = () => {
@@ -512,198 +538,199 @@
 
             if (step === 'login') {
                 return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xl">
-                            <div className="text-center mb-6">
-                                <div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
-                                    <img 
-                                        src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
-                                        alt="Logo SMP Muhammadiyah PKBS Surakarta" 
-                                        className="w-full h-full object-contain"
-                                        onError={(e) => {
-                                            e.target.onerror = null; 
-                                            e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
-                                        }}
-                                    />
-                                </div>
-                                <h1 className="text-2xl font-extrabold text-white tracking-wide">CBT EXAM</h1>
-                                <p className="text-blue-400 font-semibold text-sm mt-1">SMP Muhammadiyah PKBS Surakarta</p>
-                            </div>
+                    <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 relative overflow-hidden">
+                        {/* Background Glow Accents */}
+                        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none"></div>
+                        <div className="absolute bottom-10 right-10 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl pointer-events-none"></div>
 
-                            <div className="flex bg-slate-900 p-1 rounded-xl mb-6 border border-slate-700">
-                                <button
-                                    onClick={() => setRole('siswa')}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'siswa' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    <i className="fas fa-user-graduate mr-1.5"></i> Portal Siswa
-                                </button>
-                                <button
-                                    onClick={() => setRole('guru')}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'guru' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
-                                >
-                                    <i className="fas fa-chalkboard-user mr-1.5"></i> Portal Guru
-                                </button>
-                            </div>
-
-                            {role === 'siswa' && (
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-300 mb-1">Nama Lengkap Siswa</label>
-                                        <input
-                                            type="text"
-                                            placeholder="Contoh: Ahmad Subagja"
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-                                            value={student.name}
-                                            onChange={(e) => setStudent({ ...student, name: e.target.value })}
+                        <div className="w-full max-w-md relative z-10">
+                            <div className="glass-panel border border-slate-800 rounded-3xl p-7 sm:p-9 shadow-2xl shadow-indigo-950/40">
+                                <div className="text-center mb-8">
+                                    <div className="w-20 h-20 bg-slate-900/90 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-indigo-500/30 p-2 shadow-lg shadow-indigo-500/10">
+                                        <img 
+                                            src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                            alt="Logo SMP Muhammadiyah PKBS Surakarta" 
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.target.onerror = null; 
+                                                e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                            }}
                                         />
                                     </div>
+                                    <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white via-slate-100 to-indigo-200 tracking-tight">CBT EXAM PORTAL</h1>
+                                    <p className="text-indigo-400 font-semibold text-xs mt-1 tracking-wide uppercase">SMP Muhammadiyah PKBS Surakarta</p>
+                                </div>
 
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-300 mb-1">NISN / ID Siswa</label>
-                                            <input
-                                                type="text"
-                                                placeholder="00123456"
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-                                                value={student.nisn}
-                                                onChange={(e) => setStudent({ ...student, nisn: e.target.value })}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-300 mb-1">Kelas Siswa</label>
-                                            <select
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
-                                                value={student.kelas}
-                                                onChange={(e) => setStudent({ ...student, kelas: e.target.value })}
-                                            >
-                                                <option value="Kelas X">Kelas X</option>
-                                                <option value="Kelas XI">Kelas XI</option>
-                                                <option value="Kelas XII">Kelas XII</option>
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex justify-between items-center text-xs pt-1">
-                                        <span className="text-slate-400 font-medium">Metode Masuk Ujian:</span>
-                                        <div className="flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() => setLoginMethod('token')}
-                                                className={`px-2.5 py-1 rounded-lg border transition ${loginMethod === 'token' ? 'bg-slate-700 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'}`}
-                                            >
-                                                Pakai Token
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setLoginMethod('select')}
-                                                className={`px-2.5 py-1 rounded-lg border transition ${loginMethod === 'select' ? 'bg-slate-700 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'}`}
-                                            >
-                                                Pilih Mapel
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    {loginMethod === 'token' ? (
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-300 mb-1">Token Ujian (Dari Guru)</label>
-                                            <input
-                                                type="text"
-                                                placeholder="Contoh: CBT2026 / MTK882"
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono tracking-widest uppercase focus:outline-none focus:border-blue-500 transition"
-                                                value={student.token}
-                                                onChange={(e) => setStudent({ ...student, token: e.target.value })}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div>
-                                            <label className="block text-xs font-medium text-slate-300 mb-1">Mata Pelajaran Ujian</label>
-                                            <select
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
-                                                value={student.mapel}
-                                                onChange={(e) => setStudent({ ...student, mapel: e.target.value })}
-                                            >
-                                                {mapelList.map((m, idx) => (
-                                                    <option key={idx} value={m}>{m}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    )}
-
+                                <div className="flex bg-slate-900/80 p-1.5 rounded-2xl mb-6 border border-slate-800">
                                     <button
-                                        onClick={startStudentExam}
-                                        className="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2"
+                                        onClick={() => { setRole('siswa'); setLoginError(''); }}
+                                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 ${role === 'siswa' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}
                                     >
-                                        <span>Masuk Ruang Ujian</span>
-                                        <i className="fas fa-arrow-right"></i>
+                                        <i className="fas fa-user-graduate text-sm"></i> Portal Siswa
+                                    </button>
+                                    <button
+                                        onClick={() => { setRole('guru'); setTeacherError(''); }}
+                                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 flex items-center justify-center gap-2 ${role === 'guru' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:text-white'}`}
+                                    >
+                                        <i className="fas fa-chalkboard-user text-sm"></i> Portal Guru
                                     </button>
                                 </div>
-                            )}
 
-                            {role === 'guru' && (
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-xs font-medium text-slate-300 mb-1">Password Akses Guru</label>
-                                        <input
-                                            type="password"
-                                            placeholder="Masukkan password guru..."
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
-                                            value={teacherPass}
-                                            onChange={(e) => setTeacherPass(e.target.value)}
-                                        />
-                                        <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
-                                            <i className="fas fa-circle-info text-blue-400"></i>
-                                            <span>Password Bawaan: <strong className="text-slate-200 font-mono">guru123</strong></span>
-                                        </p>
+                                {role === 'siswa' && (
+                                    <div className="space-y-4">
+                                        {loginError && (
+                                            <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-3.5 text-xs text-red-300 flex items-start gap-2.5">
+                                                <i className="fas fa-circle-exclamation text-red-400 text-sm mt-0.5 shrink-0"></i>
+                                                <span className="leading-relaxed">{loginError}</span>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Nama Lengkap Siswa</label>
+                                            <div className="relative rounded-2xl bg-slate-900/90 border border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+                                                <i className="fas fa-user text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Contoh: Ahmad Subagja"
+                                                    className="w-full bg-transparent border-0 pl-10 pr-4 py-3 text-xs sm:text-sm text-white focus:outline-none placeholder:text-slate-600"
+                                                    value={student.name}
+                                                    onChange={(e) => setStudent({ ...student, name: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">NISN / ID Siswa</label>
+                                                <div className="relative rounded-2xl bg-slate-900/90 border border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+                                                    <i className="fas fa-id-card text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2 text-xs"></i>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="00123456"
+                                                        className="w-full bg-transparent border-0 pl-9 pr-3 py-3 text-xs text-white focus:outline-none placeholder:text-slate-600 font-mono"
+                                                        value={student.nisn}
+                                                        onChange={(e) => setStudent({ ...student, nisn: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tingkat Kelas</label>
+                                                <div className="relative rounded-2xl bg-slate-900/90 border border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+                                                    <select
+                                                        className="w-full bg-transparent border-0 px-3 py-3 text-xs text-white focus:outline-none cursor-pointer"
+                                                        value={student.kelas}
+                                                        onChange={(e) => setStudent({ ...student, kelas: e.target.value })}
+                                                    >
+                                                        <option value="Kelas X" className="bg-slate-900 text-white">Kelas X</option>
+                                                        <option value="Kelas XI" className="bg-slate-900 text-white">Kelas XI</option>
+                                                        <option value="Kelas XII" className="bg-slate-900 text-white">Kelas XII</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                                Token Ujian <span className="text-indigo-400 font-normal">(Minta ke Guru)</span>
+                                            </label>
+                                            <div className="relative rounded-2xl bg-slate-900/90 border border-indigo-500/40 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/30 transition-all">
+                                                <i className="fas fa-key text-indigo-400 absolute left-4 top-1/2 -translate-y-1/2 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    placeholder="MASUKKAN TOKEN (MISAL: CBT2026)"
+                                                    className="w-full bg-transparent border-0 pl-10 pr-4 py-3.5 text-xs sm:text-sm text-indigo-300 font-mono font-bold tracking-widest uppercase focus:outline-none placeholder:text-slate-600 placeholder:normal-case placeholder:tracking-normal placeholder:font-normal"
+                                                    value={student.token}
+                                                    onChange={(e) => setStudent({ ...student, token: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={startStudentExam}
+                                            className="w-full mt-2 py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/25 hover:shadow-indigo-600/40 transition-all duration-200 flex items-center justify-center gap-2"
+                                        >
+                                            <span>Masuk Ruang Ujian</span>
+                                            <i className="fas fa-arrow-right text-xs"></i>
+                                        </button>
                                     </div>
+                                )}
 
+                                {role === 'guru' && (
+                                    <div className="space-y-4">
+                                        {teacherError && (
+                                            <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-3 text-xs text-red-300 flex items-center gap-2">
+                                                <i className="fas fa-triangle-exclamation text-red-400"></i>
+                                                <span>{teacherError}</span>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Password Akses Guru</label>
+                                            <div className="relative rounded-2xl bg-slate-900/90 border border-slate-800 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
+                                                <i className="fas fa-lock text-slate-500 absolute left-4 top-1/2 -translate-y-1/2 text-xs"></i>
+                                                <input
+                                                    type="password"
+                                                    placeholder="Masukkan password guru..."
+                                                    className="w-full bg-transparent border-0 pl-10 pr-4 py-3 text-xs sm:text-sm text-white focus:outline-none placeholder:text-slate-600"
+                                                    value={teacherPass}
+                                                    onChange={(e) => setTeacherPass(e.target.value)}
+                                                />
+                                            </div>
+                                            <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                                                <i className="fas fa-circle-info text-indigo-400"></i>
+                                                <span>Password Bawaan: <strong className="text-indigo-300 font-mono">guru123</strong></span>
+                                            </p>
+                                        </div>
+
+                                        <button
+                                            onClick={handleTeacherLogin}
+                                            className="w-full py-3.5 bg-gradient-to-r from-emerald-600 hover:from-emerald-500 to-teal-600 hover:to-teal-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-emerald-600/25 transition-all duration-200 flex items-center justify-center gap-2"
+                                        >
+                                            <i className="fas fa-right-to-bracket"></i>
+                                            <span>Masuk Dashboard Guru</span>
+                                        </button>
+                                    </div>
+                                )}
+
+                                <div className="mt-7 pt-4 border-t border-slate-800/80 flex justify-between items-center text-[11px]">
+                                    <span className="text-slate-500 font-medium">Status Database:</span>
                                     <button
-                                        onClick={handleTeacherLogin}
-                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2"
+                                        onClick={() => setShowSettingsModal(true)}
+                                        className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 font-semibold transition"
                                     >
-                                        <i className="fas fa-right-to-bracket"></i>
-                                        <span>Masuk Dashboard Guru</span>
+                                        <i className="fas fa-database text-xs"></i>
+                                        <span>{gasUrl ? "Terhubung (Sheets)" : "Set Web App URL"}</span>
                                     </button>
                                 </div>
-                            )}
-
-                            <div className="mt-6 pt-4 border-t border-slate-700 flex justify-between items-center text-xs">
-                                <span className="text-slate-400">Status Database:</span>
-                                <button
-                                    onClick={() => setShowSettingsModal(true)}
-                                    className="text-blue-400 hover:underline flex items-center gap-1 font-medium"
-                                >
-                                    <i className="fas fa-database"></i>
-                                    <span>{gasUrl ? "Terhubung ke Google Sheets" : "Pengaturan Web App URL"}</span>
-                                </button>
                             </div>
                         </div>
 
                         {showSettingsModal && (
-                            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-lg w-full">
-                                    <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-                                        <i className="fas fa-link text-blue-400"></i> URL Google Apps Script
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl">
+                                    <h3 className="text-base font-bold text-white mb-2 flex items-center gap-2">
+                                        <i className="fas fa-link text-indigo-400"></i> Pengaturan URL Google Apps Script
                                     </h3>
-                                    <p className="text-xs text-slate-400 mb-4">
-                                        Tempelkan Web App URL Google Apps Script Anda. Setelah disimpan, seluruh siswa di komputer/browser ini akan otomatis terhubung tanpa perlu setting ulang.
+                                    <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+                                        Tempelkan Web App URL dari Google Apps Script Anda. Seluruh komputer siswa yang membuka link web ini akan langsung terhubung ke database spreadsheet Anda.
                                     </p>
                                     <input
                                         type="text"
                                         placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 mb-4 transition"
+                                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 mb-4 transition"
                                         value={gasUrl}
                                         onChange={(e) => setGasUrl(e.target.value)}
                                     />
                                     <div className="flex justify-end gap-2">
                                         <button
                                             onClick={() => setShowSettingsModal(false)}
-                                            className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
+                                            className="px-4 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
                                         >
                                             Batal
                                         </button>
                                         <button
                                             onClick={() => saveGasUrlSetting(gasUrl)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition"
+                                            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Simpan & Aktifkan
                                         </button>
@@ -719,12 +746,12 @@
                 return (
                     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                         {/* Header Dashboard Guru */}
-                        <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                        <header className="bg-slate-900/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md px-6 py-4 flex flex-wrap items-center justify-between gap-4">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-slate-700 p-1">
+                                <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-indigo-500/30 p-1">
                                     <img 
                                         src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
-                                        alt="Logo SMP Muhammadiyah PKBS Surakarta" 
+                                        alt="Logo" 
                                         className="w-full h-full object-contain"
                                         onError={(e) => {
                                             e.target.onerror = null; 
@@ -734,21 +761,21 @@
                                 </div>
                                 <div>
                                     <h1 className="text-base font-bold text-white">Dashboard Guru & Pengawas CBT</h1>
-                                    <p className="text-xs text-blue-400 font-medium">SMP Muhammadiyah PKBS Surakarta</p>
+                                    <p className="text-xs text-indigo-400 font-medium">SMP Muhammadiyah PKBS Surakarta</p>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={() => setShowSettingsModal(true)}
-                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
+                                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-database"></i>
                                     <span>{gasUrl ? "Database Active" : "Set Web App URL"}</span>
                                 </button>
                                 <button
                                     onClick={() => setStep('login')}
-                                    className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-xl text-xs font-medium border border-red-500/30 flex items-center gap-1.5 transition"
+                                    className="px-3.5 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl text-xs font-semibold border border-red-500/30 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-right-from-bracket"></i>
                                     <span>Keluar</span>
@@ -759,10 +786,10 @@
                         {/* Layout Utama Dashboard Guru */}
                         <div className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col md:flex-row gap-6">
                             {/* Sidebar Menu Guru */}
-                            <div className="w-full md:w-64 bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-1.5 h-fit">
+                            <div className="w-full md:w-64 bg-slate-900/80 border border-slate-800/80 rounded-2xl p-3 flex flex-col gap-1.5 h-fit backdrop-blur-md">
                                 <button
                                     onClick={() => setActiveGuruMenu('input_soal')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'input_soal' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-3 transition ${activeGuruMenu === 'input_soal' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-plus-circle text-base"></i>
                                     <span>1. Input Soal Baru</span>
@@ -770,10 +797,10 @@
 
                                 <button
                                     onClick={() => setActiveGuruMenu('daftar_soal')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'daftar_soal' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-3 transition ${activeGuruMenu === 'daftar_soal' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-list-check text-base"></i>
-                                    <span>2. Kelola & Daftar Soal</span>
+                                    <span>2. Kelola Bank Soal</span>
                                 </button>
 
                                 <button
@@ -781,7 +808,7 @@
                                         setActiveGuruMenu('hasil_ujian');
                                         if (gasUrl) fetchResultsFromGas();
                                     }}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'hasil_ujian' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-3 transition ${activeGuruMenu === 'hasil_ujian' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-square-poll-vertical text-base"></i>
                                     <span>3. Hasil Ujian Siswa</span>
@@ -789,7 +816,7 @@
 
                                 <button
                                     onClick={() => setActiveGuruMenu('generate_token')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'generate_token' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-bold flex items-center gap-3 transition ${activeGuruMenu === 'generate_token' ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-key text-base"></i>
                                     <span>4. Generate Token Ujian</span>
@@ -797,25 +824,25 @@
                             </div>
 
                             {/* Area Konten Utama Dashboard */}
-                            <div className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+                            <div className="flex-1 bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-md">
                                 {/* MENU 1: INPUT SOAL */}
                                 {activeGuruMenu === 'input_soal' && (
                                     <div className="space-y-6">
-                                        <div className="border-b border-slate-800 pb-3">
+                                        <div className="border-b border-slate-800/80 pb-3">
                                             <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                                <i className="fas fa-pen-to-square text-blue-400"></i>
-                                                <span>Input Soal Ujian Baru (4 Pilihan Jawaban)</span>
+                                                <i className="fas fa-pen-to-square text-indigo-400"></i>
+                                                <span>Input Soal Ujian Baru (4 Opsi Jawaban)</span>
                                             </h2>
-                                            <p className="text-xs text-slate-400">Pilih mata pelajaran & tingkat kelas sebelum membuat soal baru.</p>
+                                            <p className="text-xs text-slate-400">Pilih mata pelajaran & tingkat kelas sebelum memasukkan pertanyaan.</p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
                                             <div>
-                                                <label className="block text-xs font-medium text-slate-300 mb-1">
-                                                    Langkah 1: Pilih Mata Pelajaran <span className="text-red-400">*</span>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                                    Mata Pelajaran <span className="text-red-400">*</span>
                                                 </label>
                                                 <select
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={selectedMapelInput}
                                                     onChange={(e) => setSelectedMapelInput(e.target.value)}
                                                 >
@@ -826,11 +853,11 @@
                                             </div>
 
                                             <div>
-                                                <label className="block text-xs font-medium text-slate-300 mb-1">
-                                                    Langkah 2: Pilih Tingkat Kelas <span className="text-red-400">*</span>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                                                    Tingkat Kelas <span className="text-red-400">*</span>
                                                 </label>
                                                 <select
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={selectedKelasInput}
                                                     onChange={(e) => setSelectedKelasInput(e.target.value)}
                                                 >
@@ -843,35 +870,36 @@
 
                                         <div className="space-y-4">
                                             <div>
-                                                <label className="block text-xs font-medium text-slate-300 mb-1">Teks Pertanyaan / Soal</label>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Teks Pertanyaan / Soal</label>
                                                 <textarea
                                                     rows="3"
-                                                    placeholder="Tuliskan pertanyaan di sini..."
-                                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition"
+                                                    placeholder="Tuliskan pertanyaan ujian di sini..."
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-2xl p-3.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                                                     value={formQuestion.question}
                                                     onChange={(e) => setFormQuestion({ ...formQuestion, question: e.target.value })}
                                                 ></textarea>
                                             </div>
 
+                                            {}
                                             <div className="space-y-3">
-                                                <label className="block text-xs font-medium text-slate-300">
-                                                    Pilihan Jawaban (Centang Lingkaran untuk Menentukan Kunci Jawaban Benar)
+                                                <label className="block text-xs font-semibold text-slate-300">
+                                                    Pilihan Jawaban (Pilih Lingkaran Radio untuk Menentukan Kunci Jawaban Benar)
                                                 </label>
 
                                                 {['A', 'B', 'C', 'D'].map((letter, optIdx) => (
-                                                    <div key={optIdx} className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+                                                    <div key={optIdx} className="flex items-center gap-3 bg-slate-950/70 p-3 rounded-2xl border border-slate-800">
                                                         <input
                                                             type="radio"
                                                             name="correctAnswer"
                                                             checked={parseInt(formQuestion.correctAnswer) === optIdx}
                                                             onChange={() => setFormQuestion({ ...formQuestion, correctAnswer: optIdx })}
-                                                            className="w-4 h-4 text-blue-600 focus:ring-blue-500 accent-blue-600 cursor-pointer"
+                                                            className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 accent-indigo-600 cursor-pointer"
                                                         />
-                                                        <span className="w-6 text-center font-bold text-xs text-blue-400">{letter}.</span>
+                                                        <span className="w-6 text-center font-bold text-xs text-indigo-400">{letter}.</span>
                                                         <input
                                                             type="text"
                                                             placeholder={`Pilihan jawaban ${letter}...`}
-                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition"
+                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                                                             value={formQuestion.options[optIdx] || ''}
                                                             onChange={(e) => {
                                                                 const newOpt = [...formQuestion.options];
@@ -886,14 +914,14 @@
                                             <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                                                 <button
                                                     onClick={handleResetFormQuestion}
-                                                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium transition"
+                                                    className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium transition"
                                                 >
-                                                    Batal / Reset Form
+                                                    Reset Form
                                                 </button>
                                                 <button
                                                     disabled={isSavingQuestion}
                                                     onClick={handleSaveQuestion}
-                                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2"
+                                                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-emerald-600/20"
                                                 >
                                                     <i className="fas fa-floppy-disk"></i>
                                                     <span>{isSavingQuestion ? "Menyimpan..." : "Simpan Soal ke Sheet"}</span>
@@ -909,15 +937,15 @@
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                                             <div>
                                                 <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                                    <i className="fas fa-list-check text-blue-400"></i>
-                                                    <span>Daftar Soal & Bank Soal ({questions.length} Soal)</span>
+                                                    <i className="fas fa-list-check text-indigo-400"></i>
+                                                    <span>Bank Soal ({questions.length} Soal)</span>
                                                 </h2>
-                                                <p className="text-xs text-slate-400">Lihat, edit, atau hapus soal yang ada di bank soal.</p>
+                                                <p className="text-xs text-slate-400">Kelola dan tinjau soal per mata pelajaran.</p>
                                             </div>
 
                                             <div className="flex items-center gap-2">
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={filterDaftarMapel}
                                                     onChange={(e) => setFilterDaftarMapel(e.target.value)}
                                                 >
@@ -928,7 +956,7 @@
                                                 </select>
 
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={filterDaftarKelas}
                                                     onChange={(e) => setFilterDaftarKelas(e.target.value)}
                                                 >
@@ -945,12 +973,12 @@
                                                 .filter(q => (filterDaftarMapel === 'ALL' || (q.mapel && q.mapel.toLowerCase() === filterDaftarMapel.toLowerCase())) &&
                                                             (filterDaftarKelas === 'ALL' || filterDaftarKelas === 'Semua Kelas' || (q.kelas && q.kelas.toLowerCase() === filterDaftarKelas.toLowerCase())))
                                                 .map((q, idx) => (
-                                                    <div key={q.id || idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 relative">
+                                                    <div key={q.id || idx} className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 relative">
                                                         <div className="flex items-center gap-2 mb-2">
-                                                            <span className="px-2 py-0.5 bg-slate-800 text-blue-400 text-[10px] font-semibold rounded border border-slate-700">
+                                                            <span className="px-2.5 py-0.5 bg-indigo-950/60 text-indigo-300 text-[10px] font-bold rounded-lg border border-indigo-500/30">
                                                                 {q.mapel || 'Umum'}
                                                             </span>
-                                                            <span className="px-2 py-0.5 bg-slate-800 text-emerald-400 text-[10px] font-semibold rounded border border-slate-700">
+                                                            <span className="px-2.5 py-0.5 bg-emerald-950/60 text-emerald-300 text-[10px] font-bold rounded-lg border border-emerald-500/30">
                                                                 {q.kelas || 'Semua Kelas'}
                                                             </span>
                                                         </div>
@@ -959,11 +987,11 @@
                                                             {idx + 1}. {q.question}
                                                         </p>
 
-                                                        <div className="grid grid-cols-2 gap-2 mb-3">
+                                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                                                             {q.options && q.options.map((opt, optIdx) => (
                                                                 <div
                                                                     key={optIdx}
-                                                                    className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 border ${q.correctAnswer === optIdx ? 'bg-emerald-950/40 text-emerald-300 border-emerald-600/50 font-semibold' : 'bg-slate-900 text-slate-300 border-slate-800'}`}
+                                                                    className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 border ${q.correctAnswer === optIdx ? 'bg-emerald-950/50 text-emerald-300 border-emerald-500/50 font-semibold' : 'bg-slate-900/80 text-slate-300 border-slate-800'}`}
                                                                 >
                                                                     <span className="w-4 text-center font-bold text-slate-400">{String.fromCharCode(65 + optIdx)}.</span>
                                                                     <span className="truncate">{opt}</span>
@@ -994,21 +1022,21 @@
                                     </div>
                                 )}
 
-                                {/* MENU 3: HASIL UJIAN SISWA */}
+                                {}
                                 {activeGuruMenu === 'hasil_ujian' && (
                                     <div className="space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                                             <div>
                                                 <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                                    <i className="fas fa-square-poll-vertical text-blue-400"></i>
+                                                    <i className="fas fa-square-poll-vertical text-indigo-400"></i>
                                                     <span>Rekapitulasi Hasil Ujian Siswa</span>
                                                 </h2>
-                                                <p className="text-xs text-slate-400">Data hasil ujian dan catatan kecurangan terenkripsi dari Google Sheets.</p>
+                                                <p className="text-xs text-slate-400">Data nilai dan riwayat pelanggaran kecurangan.</p>
                                             </div>
 
                                             <div className="flex items-center gap-2">
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={filterKelas}
                                                     onChange={(e) => setFilterKelas(e.target.value)}
                                                 >
@@ -1021,7 +1049,7 @@
                                                 <button
                                                     disabled={isLoadingResults}
                                                     onClick={fetchResultsFromGas}
-                                                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                                                    className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20"
                                                 >
                                                     <i className={`fas fa-rotate ${isLoadingResults ? 'animate-spin' : ''}`}></i>
                                                     <span>Refresh</span>
@@ -1029,38 +1057,38 @@
                                             </div>
                                         </div>
 
-                                        <div className="overflow-x-auto">
+                                        <div className="overflow-x-auto rounded-2xl border border-slate-800">
                                             <table className="w-full text-left text-xs border-collapse">
                                                 <thead>
                                                     <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
-                                                        <th className="p-3">Waktu</th>
-                                                        <th className="p-3">Nama Siswa</th>
-                                                        <th className="p-3">NISN</th>
-                                                        <th className="p-3">Kelas</th>
-                                                        <th className="p-3">Mata Pelajaran</th>
-                                                        <th className="p-3 text-center">Skor</th>
-                                                        <th className="p-3 text-center">Pelanggaran</th>
-                                                        <th className="p-3">Status</th>
+                                                        <th className="p-3.5">Waktu</th>
+                                                        <th className="p-3.5">Nama Siswa</th>
+                                                        <th className="p-3.5">NISN</th>
+                                                        <th className="p-3.5">Kelas</th>
+                                                        <th className="p-3.5">Mata Pelajaran</th>
+                                                        <th className="p-3.5 text-center">Skor</th>
+                                                        <th className="p-3.5 text-center">Pelanggaran</th>
+                                                        <th className="p-3.5">Status</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-slate-800">
+                                                <tbody className="divide-y divide-slate-800/60 bg-slate-900/50">
                                                     {examResults
                                                         .filter(res => filterKelas === 'ALL' || res.kelas === filterKelas)
                                                         .map((res, idx) => (
-                                                            <tr key={idx} className="hover:bg-slate-950/50">
-                                                                <td className="p-3 text-slate-400 whitespace-nowrap">{res.time}</td>
-                                                                <td className="p-3 font-semibold text-white">{res.name}</td>
-                                                                <td className="p-3 text-slate-300 font-mono">{res.nisn}</td>
-                                                                <td className="p-3 text-slate-300">{res.kelas}</td>
-                                                                <td className="p-3 text-blue-400 font-medium">{res.mapel}</td>
-                                                                <td className="p-3 text-center font-bold text-amber-400 text-sm">{res.score}</td>
-                                                                <td className="p-3 text-center">
-                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${res.violationsCount > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                                                            <tr key={idx} className="hover:bg-slate-900 transition">
+                                                                <td className="p-3.5 text-slate-400 whitespace-nowrap">{res.time}</td>
+                                                                <td className="p-3.5 font-bold text-white">{res.name}</td>
+                                                                <td className="p-3.5 text-slate-300 font-mono">{res.nisn}</td>
+                                                                <td className="p-3.5 text-slate-300">{res.kelas}</td>
+                                                                <td className="p-3.5 text-indigo-400 font-semibold">{res.mapel}</td>
+                                                                <td className="p-3.5 text-center font-extrabold text-amber-400 text-sm">{res.score}</td>
+                                                                <td className="p-3.5 text-center">
+                                                                    <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${res.violationsCount > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
                                                                         {res.violationsCount}x
                                                                     </span>
                                                                 </td>
-                                                                <td className="p-3">
-                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${res.status && res.status.includes('Selesai') ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                                                                <td className="p-3.5">
+                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold ${res.status && res.status.includes('Selesai') ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 border border-red-500/30'}`}>
                                                                         {res.status}
                                                                     </span>
                                                                 </td>
@@ -1069,39 +1097,48 @@
                                                 </tbody>
                                             </table>
                                             {examResults.length === 0 && (
-                                                <div className="text-center py-8 text-slate-500 text-xs">
-                                                    Belum ada data hasil ujian yang ditarik dari Google Sheets.
+                                                <div className="text-center py-10 text-slate-500 text-xs">
+                                                    Belum ada rekapitulasi hasil ujian. Tekan tombol <strong>Refresh</strong> di atas untuk memuat data dari Google Sheets.
                                                 </div>
                                             )}
                                         </div>
                                     </div>
                                 )}
 
-                                {/* MENU 4: GENERATE TOKEN */}
+                                {}
                                 {activeGuruMenu === 'generate_token' && (
                                     <div className="space-y-4">
                                         <div className="border-b border-slate-800 pb-3">
                                             <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                                <i className="fas fa-key text-blue-400"></i>
-                                                <span>Generate Token Ujian Per Mata Pelajaran</span>
+                                                <i className="fas fa-key text-indigo-400"></i>
+                                                <span>Generate Token Ujian Aktif</span>
                                             </h2>
-                                            <p className="text-xs text-slate-400">Buat token aktif agar siswa dapat memasuki ruang ujian.</p>
+                                            <p className="text-xs text-slate-400">Bagikan token aktif ini kepada siswa agar mereka dapat memasuki ujian.</p>
                                         </div>
 
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                             {mapelList.map((m, idx) => (
-                                                <div key={idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
-                                                    <div>
-                                                        <h3 className="text-xs font-bold text-white">{m}</h3>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5">Token Aktif:</p>
-                                                        <span className="font-mono text-base font-extrabold text-blue-400 tracking-wider">
-                                                            {tokens[m] || 'BELUM DI-GENERATE'}
-                                                        </span>
+                                                <div key={idx} className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
+                                                    <div className="space-y-1">
+                                                        <h3 className="text-xs font-bold text-slate-200">{m}</h3>
+                                                        <p className="text-[10px] text-slate-400">Token Masuk Ujian:</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-mono text-lg font-black text-indigo-300 tracking-widest uppercase">
+                                                                {tokens[m] || 'N/A'}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => copyToClipboard(tokens[m], m)}
+                                                                className="text-slate-400 hover:text-indigo-400 text-xs transition"
+                                                                title="Salin Token"
+                                                            >
+                                                                <i className={`fas ${copiedTokenMapel === m ? 'fa-check text-emerald-400' : 'fa-copy'}`}></i>
+                                                            </button>
+                                                        </div>
                                                     </div>
 
                                                     <button
                                                         onClick={() => generateNewToken(m)}
-                                                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                                                        className="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
                                                     >
                                                         <i className="fas fa-arrows-rotate"></i>
                                                         <span>Generate</span>
@@ -1116,17 +1153,17 @@
 
                         {/* Modal Edit Soal */}
                         {editingQuestion && (
-                            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-lg w-full space-y-4">
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-lg w-full space-y-4 shadow-2xl">
                                     <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                        <i className="fas fa-pen-to-square text-amber-400"></i> Edit Soal
+                                        <i className="fas fa-pen-to-square text-amber-400"></i> Edit Soal Ujian
                                     </h3>
 
                                     <div>
                                         <label className="block text-xs text-slate-400 mb-1">Teks Pertanyaan</label>
                                         <textarea
                                             rows="3"
-                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition"
+                                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                                             value={editingQuestion.question}
                                             onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
                                         ></textarea>
@@ -1139,12 +1176,12 @@
                                                 name="editCorrect"
                                                 checked={editingQuestion.correctAnswer === optIdx}
                                                 onChange={() => setEditingQuestion({ ...editingQuestion, correctAnswer: optIdx })}
-                                                className="accent-blue-500"
+                                                className="accent-indigo-500"
                                             />
-                                            <span className="text-xs font-bold text-blue-400 w-4">{letter}.</span>
+                                            <span className="text-xs font-bold text-indigo-400 w-4">{letter}.</span>
                                             <input
                                                 type="text"
-                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition"
+                                                className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition"
                                                 value={editingQuestion.options[optIdx] || ''}
                                                 onChange={(e) => {
                                                     const newOpts = [...editingQuestion.options];
@@ -1164,7 +1201,7 @@
                                         </button>
                                         <button
                                             onClick={handleSaveEditQuestion}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition"
+                                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Simpan Perubahan
                                         </button>
@@ -1175,23 +1212,23 @@
 
                         {/* Modal Hapus Soal */}
                         {deletingQId && (
-                            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center space-y-4">
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center space-y-4 shadow-2xl">
                                     <div className="w-12 h-12 bg-red-500/20 text-red-400 rounded-2xl flex items-center justify-center mx-auto border border-red-500/30">
                                         <i className="fas fa-trash-can text-xl"></i>
                                     </div>
-                                    <h3 className="text-base font-bold text-white">Konfirmasi Hapus Soal</h3>
+                                    <h3 className="text-base font-bold text-white">Konfirmasi Hapus</h3>
                                     <p className="text-xs text-slate-400">Apakah Anda yakin ingin menghapus soal ini dari bank soal?</p>
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => setDeletingQId(null)}
-                                            className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
+                                            className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
                                         >
                                             Batal
                                         </button>
                                         <button
                                             onClick={confirmDeleteQuestion}
-                                            className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold transition"
+                                            className="flex-1 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition"
                                         >
                                             Ya, Hapus
                                         </button>
@@ -1205,60 +1242,64 @@
 
             if (step === 'instructions') {
                 return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-lg w-full text-white shadow-xl">
-                            <div className="text-center mb-6">
-                                <div className="w-16 h-16 bg-slate-900/60 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
-                                    <img 
-                                        src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
-                                        alt="Logo SMP Muhammadiyah PKBS Surakarta" 
-                                        className="w-full h-full object-contain"
-                                        onError={(e) => {
-                                            e.target.onerror = null; 
-                                            e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
-                                        }}
-                                    />
+                    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+                        <div className="w-full max-w-lg relative z-10">
+                            <div className="glass-panel border border-slate-800 rounded-3xl p-7 sm:p-9 shadow-2xl text-white">
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-indigo-500/30 p-2">
+                                        <img 
+                                            src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                            alt="Logo" 
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.target.onerror = null; 
+                                                e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                            }}
+                                        />
+                                    </div>
+                                    <h2 className="text-xl font-black">Petunjuk & Aturan Ujian</h2>
+                                    <p className="text-xs text-indigo-400 font-bold mt-0.5 uppercase tracking-wide">SMP Muhammadiyah PKBS Surakarta</p>
+                                    <div className="inline-block mt-2 px-3 py-1 bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 font-bold rounded-xl text-xs">
+                                        {selectedMapel} - {student.kelas}
+                                    </div>
                                 </div>
-                                <h2 className="text-xl font-bold">Petunjuk & Aturan Ujian</h2>
-                                <p className="text-xs text-blue-400 font-medium mt-0.5">SMP Muhammadiyah PKBS Surakarta</p>
-                                <p className="text-xs text-slate-400 mt-0.5">{selectedMapel} - {student.kelas}</p>
-                            </div>
 
-                            <div className="bg-slate-900 p-4 rounded-xl border border-slate-700 space-y-3 mb-6 text-xs text-slate-300">
-                                <div className="flex justify-between border-b border-slate-800 pb-2">
-                                    <span className="text-slate-400">Nama Peserta:</span>
-                                    <span className="font-semibold text-white">{student.name}</span>
+                                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5 mb-6 text-xs text-slate-300">
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">Nama Peserta:</span>
+                                        <span className="font-bold text-white">{student.name}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">NISN:</span>
+                                        <span className="font-bold text-white font-mono">{student.nisn}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">Durasi Pengerjaan:</span>
+                                        <span className="font-bold text-amber-400">{DURATION_MINUTES} Menit</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">Batas Toleransi Pelanggaran:</span>
+                                        <span className="font-bold text-red-400">Maksimal {MAX_VIOLATIONS} Kali</span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between border-b border-slate-800 pb-2">
-                                    <span className="text-slate-400">NISN:</span>
-                                    <span className="font-semibold text-white">{student.nisn}</span>
-                                </div>
-                                <div className="flex justify-between border-b border-slate-800 pb-2">
-                                    <span className="text-slate-400">Durasi Pengerjaan:</span>
-                                    <span className="font-semibold text-amber-400">{DURATION_MINUTES} Menit</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-slate-400">Batas Pelanggaran:</span>
-                                    <span className="font-semibold text-red-400">Maksimal {MAX_VIOLATIONS} Kali</span>
-                                </div>
-                            </div>
 
-                            <div className="bg-slate-900/80 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-200 space-y-1.5">
-                                <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-400">
-                                    <i className="fas fa-triangle-exclamation"></i> PERHATIAN PENTING:
+                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6 text-xs text-amber-200 space-y-1.5">
+                                    <div className="font-bold flex items-center gap-2 mb-1 text-amber-400">
+                                        <i className="fas fa-triangle-exclamation text-sm"></i> ATURAN PENTING & KEAMANAN UJIAN:
+                                    </div>
+                                    <p>1. Ujian berjalan dalam mode <strong>Layar Penuh (Fullscreen)</strong> secara wajib.</p>
+                                    <p>2. Dilarang berpindah tab, berpindah aplikasi, meminimize window, atau menekan tombol F12 / PrintScreen / Copy-Paste.</p>
+                                    <p>3. Jika melakukan pelanggaran sebanyak {MAX_VIOLATIONS}x, sistem akan <strong>OTOMATIS MENGHENTIKAN UJIAN & MENDISKUALIFIKASI</strong>.</p>
                                 </div>
-                                <p>1. Ujian akan berjalan dalam mode <strong>Layar Penuh (Fullscreen)</strong>.</p>
-                                <p>2. Dilarang membuka tab lain, berpindah aplikasi, atau menekan tombol F12/PrintScreen.</p>
-                                <p>3. Jika melakukan pelanggaran sebanyak {MAX_VIOLATIONS}x, sistem akan <strong>MENGHENTIKAN UJIAN SECARA OTOMATIS</strong>.</p>
-                            </div>
 
-                            <button
-                                onClick={beginTest}
-                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm transition flex items-center justify-center gap-2"
-                            >
-                                <i className="fas fa-play"></i>
-                                <span>Saya Mengerti & Mulai Ujian</span>
-                            </button>
+                                <button
+                                    onClick={beginTest}
+                                    className="w-full py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2"
+                                >
+                                    <i className="fas fa-play"></i>
+                                    <span>Saya Mengerti & Mulai Pengerjaan</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );
@@ -1270,9 +1311,9 @@
 
                 return (
                     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-                        <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 sticky top-0 z-30 flex items-center justify-between">
+                        <header className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-3 sticky top-0 z-30 backdrop-blur-md flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-slate-950 rounded-lg flex items-center justify-center border border-slate-700 p-1">
+                                <div className="w-9 h-9 bg-slate-950 rounded-xl flex items-center justify-center border border-indigo-500/30 p-1">
                                     <img 
                                         src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
                                         alt="Logo" 
@@ -1285,24 +1326,24 @@
                                 </div>
                                 <div>
                                     <h1 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{selectedMapel}</h1>
-                                    <p className="text-[10px] text-slate-400">{student.name} ({student.kelas})</p>
+                                    <p className="text-[10px] text-indigo-400 font-medium">{student.name} ({student.kelas})</p>
                                 </div>
                             </div>
 
                             <div className="flex items-center gap-3">
-                                <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 ${violations.length > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400'}`}>
+                                <div className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 ${violations.length > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
                                     <i className="fas fa-shield-halved"></i>
-                                    <span>{violations.length}/{MAX_VIOLATIONS}</span>
+                                    <span>Pelanggaran: {violations.length}/{MAX_VIOLATIONS}</span>
                                 </div>
 
-                                <div className={`px-3 py-1 rounded-lg font-mono text-xs sm:text-sm font-bold flex items-center gap-2 ${timeLeft < 180 ? 'bg-red-600 text-white animate-pulse' : 'bg-slate-800 text-amber-400 border border-slate-700'}`}>
+                                <div className={`px-3 py-1 rounded-xl font-mono text-xs sm:text-sm font-extrabold flex items-center gap-2 ${timeLeft < 180 ? 'bg-red-600 text-white animate-pulse shadow-lg shadow-red-600/40' : 'bg-slate-800 text-amber-400 border border-slate-700'}`}>
                                     <i className="fas fa-clock"></i>
                                     <span>{formatTime(timeLeft)}</span>
                                 </div>
 
                                 <button
                                     onClick={() => setShowSubmitModal(true)}
-                                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition"
+                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20"
                                 >
                                     Selesai Ujian
                                 </button>
@@ -1310,23 +1351,23 @@
                         </header>
 
                         <div className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto flex flex-col md:flex-row gap-6">
-                            <div className="flex-1 flex flex-col justify-between bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6">
+                            <div className="flex-1 flex flex-col justify-between bg-slate-900/80 border border-slate-800/80 rounded-3xl p-5 sm:p-7 backdrop-blur-md shadow-xl">
                                 {currentQ ? (
                                     <div>
-                                        <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
-                                            <span className="text-xs font-bold text-blue-400 bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
-                                                Soal No. {currentQIndex + 1} / {activeQ.length}
+                                        <div className="flex justify-between items-center mb-5 border-b border-slate-800/80 pb-3.5">
+                                            <span className="text-xs font-extrabold text-indigo-300 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-500/30">
+                                                Soal Nomor {currentQIndex + 1} dari {activeQ.length}
                                             </span>
                                             <button
                                                 onClick={() => setFlagged({ ...flagged, [currentQ.id]: !flagged[currentQ.id] })}
-                                                className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition ${flagged[currentQ.id] ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400 hover:text-white'}`}
+                                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${flagged[currentQ.id] ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'}`}
                                             >
                                                 <i className="fas fa-bookmark"></i>
                                                 <span>Ragu-ragu</span>
                                             </button>
                                         </div>
 
-                                        <p className="text-sm sm:text-base font-medium text-white mb-6 leading-relaxed">
+                                        <p className="text-sm sm:text-base font-semibold text-white mb-6 leading-relaxed">
                                             {currentQ.question}
                                         </p>
 
@@ -1337,12 +1378,12 @@
                                                     <button
                                                         key={optIdx}
                                                         onClick={() => setAnswers({ ...answers, [currentQ.id]: optIdx })}
-                                                        className={`w-full text-left p-3.5 rounded-xl border text-xs sm:text-sm flex items-center gap-3 transition ${isSelected ? 'bg-slate-800 border-blue-500 text-white font-semibold' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
+                                                        className={`w-full text-left p-4 rounded-2xl border text-xs sm:text-sm flex items-center gap-3.5 transition-all duration-200 ${isSelected ? 'bg-indigo-950/60 border-indigo-500 text-white font-semibold shadow-lg shadow-indigo-950/50' : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-900'}`}
                                                     >
-                                                        <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
+                                                        <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition ${isSelected ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-800 text-slate-400'}`}>
                                                             {String.fromCharCode(65 + optIdx)}
                                                         </span>
-                                                        <span className="flex-1">{opt}</span>
+                                                        <span className="flex-1 leading-normal">{opt}</span>
                                                     </button>
                                                 );
                                             })}
@@ -1352,11 +1393,11 @@
                                     <div className="text-center py-10 text-slate-400 text-xs">Tidak ada soal tersedia untuk mata pelajaran ini.</div>
                                 )}
 
-                                <div className="flex justify-between items-center gap-3 mt-8 pt-4 border-t border-slate-800">
+                                <div className="flex justify-between items-center gap-3 mt-8 pt-4 border-t border-slate-800/80">
                                     <button
                                         disabled={currentQIndex === 0}
                                         onClick={() => setCurrentQIndex(prev => prev - 1)}
-                                        className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-300 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
                                     >
                                         <i className="fas fa-chevron-left"></i>
                                         <span>Sebelumnya</span>
@@ -1365,7 +1406,7 @@
                                     {currentQIndex === activeQ.length - 1 ? (
                                         <button
                                             onClick={() => setShowSubmitModal(true)}
-                                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/25"
                                         >
                                             <span>Kumpulkan</span>
                                             <i className="fas fa-paper-plane"></i>
@@ -1373,7 +1414,7 @@
                                     ) : (
                                         <button
                                             onClick={() => setCurrentQIndex(prev => prev + 1)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                                            className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/25"
                                         >
                                             <span>Selanjutnya</span>
                                             <i className="fas fa-chevron-right"></i>
@@ -1382,9 +1423,10 @@
                                 </div>
                             </div>
 
-                            <div className="w-full md:w-64 bg-slate-900 border border-slate-800 rounded-2xl p-4 h-fit">
-                                <h3 className="text-xs font-bold text-slate-300 mb-3 border-b border-slate-800 pb-2">
-                                    Navigasi Nomor Soal
+                            <div className="w-full md:w-64 bg-slate-900/80 border border-slate-800/80 rounded-3xl p-4 h-fit backdrop-blur-md shadow-xl">
+                                <h3 className="text-xs font-bold text-slate-300 mb-3 border-b border-slate-800/80 pb-2 flex items-center gap-2">
+                                    <i className="fas fa-th-large text-indigo-400"></i>
+                                    <span>Navigasi Soal</span>
                                 </h3>
                                 <div className="grid grid-cols-5 gap-2">
                                     {activeQ.map((q, idx) => {
@@ -1392,8 +1434,8 @@
                                         const isFlagged = flagged[q.id];
                                         const isCurrent = currentQIndex === idx;
 
-                                        let btnClass = 'bg-slate-950 text-slate-400 border-slate-800';
-                                        if (isCurrent) btnClass = 'ring-2 ring-blue-500 bg-blue-600 text-white font-bold';
+                                        let btnClass = 'bg-slate-950/80 text-slate-400 border-slate-800';
+                                        if (isCurrent) btnClass = 'ring-2 ring-indigo-500 bg-indigo-600 text-white font-bold';
                                         else if (isFlagged) btnClass = 'bg-amber-500 text-slate-950 font-bold';
                                         else if (isAnswered) btnClass = 'bg-emerald-600 text-white font-semibold';
 
@@ -1401,7 +1443,7 @@
                                             <button
                                                 key={q.id || idx}
                                                 onClick={() => setCurrentQIndex(idx)}
-                                                className={`h-9 rounded-lg text-xs border transition flex items-center justify-center ${btnClass}`}
+                                                className={`h-9 rounded-xl text-xs border transition flex items-center justify-center ${btnClass}`}
                                             >
                                                 {idx + 1}
                                             </button>
@@ -1412,14 +1454,14 @@
                         </div>
 
                         {showViolationModal && (
-                            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-red-500/50 rounded-2xl p-6 max-w-sm w-full text-center">
-                                    <div className="w-14 h-14 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-red-500/30">
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-red-500/50 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
+                                    <div className="w-14 h-14 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-red-500/40">
                                         <i className="fas fa-triangle-exclamation text-2xl"></i>
                                     </div>
-                                    <h3 className="text-base font-bold text-white mb-1">PERINGATAN PELANGGARAN!</h3>
-                                    <p className="text-xs text-red-400 font-medium mb-3">
-                                        {violations[violations.length - 1]?.reason || "Tindakan kecurangan terdeteksi!"}
+                                    <h3 className="text-base font-black text-white mb-1">PERINGATAN PELANGGARAN!</h3>
+                                    <p className="text-xs text-red-400 font-semibold mb-3">
+                                        {violations[violations.length - 1]?.reason || "Tindakan terlarang terdeteksi!"}
                                     </p>
                                     <p className="text-[11px] text-slate-400 mb-5">
                                         Pelanggaran ke-<strong>{violations.length}</strong> dari maksimal <strong>{MAX_VIOLATIONS}</strong>x.
@@ -1429,7 +1471,7 @@
                                             setShowViolationModal(false);
                                             requestFullscreenMode();
                                         }}
-                                        className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition"
+                                        className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-2xl text-xs font-bold transition shadow-lg shadow-red-600/30"
                                     >
                                         SAYA MENGERTI & KEMBALI UJIAN
                                     </button>
@@ -1438,12 +1480,12 @@
                         )}
 
                         {showSubmitModal && (
-                            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center">
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
                                     <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-500/30">
                                         <i className="fas fa-paper-plane text-xl"></i>
                                     </div>
-                                    <h3 className="text-base font-bold text-white mb-1">Kumpulkan Ujian?</h3>
+                                    <h3 className="text-base font-bold text-white mb-1">Kumpulkan Jawaban Ujian?</h3>
                                     <p className="text-xs text-slate-400 mb-5">
                                         Terjawab: <strong className="text-emerald-400">{Object.keys(answers).length}</strong> dari {activeQ.length} Soal.
                                     </p>
@@ -1452,13 +1494,13 @@
                                             onClick={() => setShowSubmitModal(false)}
                                             className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-700 transition"
                                         >
-                                            Kembali Pengerjaan
+                                            Kembali
                                         </button>
                                         <button
                                             onClick={() => submitExam(false, "Selesai Tepat Waktu")}
-                                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition"
+                                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/20"
                                         >
-                                            Ya, Selesai
+                                            Ya, Kumpulkan
                                         </button>
                                     </div>
                                 </div>
@@ -1471,35 +1513,37 @@
             if (step === 'result') {
                 const { correct, total, score } = calculateScore();
                 return (
-                    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center shadow-xl">
-                            <div className="w-16 h-16 bg-slate-900/60 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
-                                <img 
-                                    src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
-                                    alt="Logo SMP Muhammadiyah PKBS Surakarta" 
-                                    className="w-full h-full object-contain"
-                                    onError={(e) => {
-                                        e.target.onerror = null; 
-                                        e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
-                                    }}
-                                />
-                            </div>
-                            <h2 className="text-xl font-bold text-white">Ujian Telah Selesai</h2>
-                            <p className="text-xs text-blue-400 font-medium mt-0.5">SMP Muhammadiyah PKBS Surakarta</p>
-                            <p className="text-xs text-slate-400 mt-1 mb-6">{selectedMapel} - {student.name}</p>
+                    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+                        <div className="w-full max-w-md relative z-10">
+                            <div className="glass-panel border border-slate-800 rounded-3xl p-7 sm:p-9 text-center shadow-2xl">
+                                <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-indigo-500/30 p-2">
+                                    <img 
+                                        src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                        alt="Logo" 
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                            e.target.onerror = null; 
+                                            e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                        }}
+                                    />
+                                </div>
+                                <h2 className="text-xl font-black text-white">Ujian Telah Selesai</h2>
+                                <p className="text-xs text-indigo-400 font-bold mt-0.5 uppercase tracking-wide">SMP Muhammadiyah PKBS Surakarta</p>
+                                <p className="text-xs text-slate-400 mt-1 mb-6">{selectedMapel} - {student.name}</p>
 
-                            <div className="bg-slate-900 p-6 rounded-xl border border-slate-700 mb-6">
-                                <span className="text-xs text-slate-500 uppercase tracking-wider block font-semibold">Skor Akhir Siswa</span>
-                                <span className="text-5xl font-extrabold text-blue-500 my-2 block">{score.toFixed(0)}</span>
-                                <span className="text-xs text-slate-400">Jawaban Benar: <strong className="text-white">{correct}</strong> dari {total} soal</span>
-                            </div>
+                                <div className="bg-slate-950/80 p-6 rounded-2xl border border-slate-800 mb-6">
+                                    <span className="text-xs text-slate-500 uppercase tracking-wider block font-bold">Skor Akhir Siswa</span>
+                                    <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-violet-400 my-2 block">{score.toFixed(0)}</span>
+                                    <span className="text-xs text-slate-400">Jawaban Benar: <strong className="text-white">{correct}</strong> dari {total} soal</span>
+                                </div>
 
-                            <button
-                                onClick={() => window.location.reload()}
-                                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-xs transition"
-                            >
-                                Kembali ke Halaman Login
-                            </button>
+                                <button
+                                    onClick={() => window.location.reload()}
+                                    className="w-full py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 transition"
+                                >
+                                    Selesai & Kembali ke Login
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );
