@@ -64,7 +64,7 @@
         const DEFAULT_QUESTIONS = [
             {
                 mapel: "Pancasila & Kewarganegaraan",
-                kelas: "Kelas X",
+                kelas: "Kelas VII",
                 id: 1,
                 question: "Pancasila sebagai dasar negara Indonesia secara resmi disahkan pada tanggal...",
                 options: ["1 Juni 1945", "17 Agustus 1945", "18 Agustus 1945", "22 Juni 1945"],
@@ -72,7 +72,7 @@
             },
             {
                 mapel: "Biologi",
-                kelas: "Kelas X",
+                kelas: "Kelas VII",
                 id: 2,
                 question: "Proses fotosintesis pada tumbuhan hijau menghasilkan oksigen dan...",
                 options: ["Karbondioksida", "Glukosa", "Nitrogen", "Klorofil"],
@@ -80,7 +80,7 @@
             },
             {
                 mapel: "Matematika",
-                kelas: "Kelas XI",
+                kelas: "Kelas VIII",
                 id: 3,
                 question: "Jika 3x + 7 = 22, maka nilai dari x + 5 adalah...",
                 options: ["8", "10", "12", "15"],
@@ -96,9 +96,9 @@
             const [step, setStep] = useState('login'); // 'login', 'guru_dashboard', 'instructions', 'exam', 'result'
             
             // Student login state (Token-only login)
-            const [student, setStudent] = useState({ name: '', nisn: '', kelas: 'Kelas X', token: '' });
+            const [student, setStudent] = useState({ name: '', nisn: '', kelas: 'Kelas VII', token: '' });
             const [selectedMapel, setSelectedMapel] = useState('');
-            const [selectedKelas, setSelectedKelas] = useState('Kelas X');
+            const [selectedKelas, setSelectedKelas] = useState('Kelas VII');
             const [loginError, setLoginError] = useState('');
             
             // Teacher login & dashboard state
@@ -118,19 +118,21 @@
             });
 
             const [questions, setQuestions] = useState(DEFAULT_QUESTIONS);
-            const [mapelList] = useState(["Matematika", "Biologi", "Pancasila & Kewarganegaraan", "Bahasa Indonesia", "Fisika", "Kimia"]);
-            const [kelasList] = useState(["Semua Kelas", "Kelas X", "Kelas XI", "Kelas XII"]);
+            const [mapelList] = useState(["Matematika", "IPAS", "Pancasila & Kewarganegaraan", "Bahasa Indonesia", "Pendidikan Agama Islam", "Bahasa Inggris"]);
+            const [kelasList] = useState(["Semua Kelas", "Kelas VII", "Kelas VIII", "Kelas IX"]);
 
             const [tokens, setTokens] = useState({
                 "Matematika": "MTK882",
-                "Biologi": "BIO123",
+                "Bahasa Inggris": "BIO123",
                 "Pancasila & Kewarganegaraan": "CBT2026",
                 "Bahasa Indonesia": "BIN771"
+                "Pendidikan Agama Islam": "PAI771"
+                "IPAS": "7IPAS6"
             });
 
             // Form Input Soal State (Guru)
             const [selectedMapelInput, setSelectedMapelInput] = useState('Pancasila & Kewarganegaraan');
-            const [selectedKelasInput, setSelectedKelasInput] = useState('Kelas X');
+            const [selectedKelasInput, setSelectedKelasInput] = useState('Kelas VII');
             const [formQuestion, setFormQuestion] = useState({
                 question: '',
                 options: ['', '', '', ''],
@@ -621,9 +623,9 @@
                                                         value={student.kelas}
                                                         onChange={(e) => setStudent({ ...student, kelas: e.target.value })}
                                                     >
-                                                        <option value="Kelas X" className="bg-slate-900 text-white">Kelas X</option>
-                                                        <option value="Kelas XI" className="bg-slate-900 text-white">Kelas XI</option>
-                                                        <option value="Kelas XII" className="bg-slate-900 text-white">Kelas XII</option>
+                                                        <option value="Kelas VII" className="bg-slate-900 text-white">Kelas VII</option>
+                                                        <option value="Kelas VIII" className="bg-slate-900 text-white">Kelas VIII</option>
+                                                        <option value="Kelas IX" className="bg-slate-900 text-white">Kelas IX</option>
                                                     </select>
                                                 </div>
                                             </div>
@@ -1041,9 +1043,9 @@
                                                     onChange={(e) => setFilterKelas(e.target.value)}
                                                 >
                                                     <option value="ALL">Semua Kelas</option>
-                                                    <option value="Kelas X">Kelas X</option>
-                                                    <option value="Kelas XI">Kelas XI</option>
-                                                    <option value="Kelas XII">Kelas XII</option>
+                                                    <option value="Kelas VII">Kelas VII</option>
+                                                    <option value="Kelas VIII">Kelas VIII</option>
+                                                    <option value="Kelas IX">Kelas IX</option>
                                                 </select>
 
                                                 <button
