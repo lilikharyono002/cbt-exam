@@ -61,33 +61,6 @@
 
         const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbztLyZuduyezaFqLLGK8hkg71lsiVxmrYTLEhteNx8ZCKUCabi8s-EIjYdLSYbXsYSy5g/exec";
 
-        const DEFAULT_QUESTIONS = [
-            {
-                mapel: "Pancasila & Kewarganegaraan",
-                kelas: "Kelas VII",
-                id: 1,
-                question: "Pancasila sebagai dasar negara Indonesia secara resmi disahkan pada tanggal...",
-                options: ["1 Juni 1945", "17 Agustus 1945", "18 Agustus 1945", "22 Juni 1945"],
-                correctAnswer: 2
-            },
-            {
-                mapel: "Biologi",
-                kelas: "Kelas VII",
-                id: 2,
-                question: "Proses fotosintesis pada tumbuhan hijau menghasilkan oksigen dan...",
-                options: ["Karbondioksida", "Glukosa", "Nitrogen", "Klorofil"],
-                correctAnswer: 1
-            },
-            {
-                mapel: "Matematika",
-                kelas: "Kelas VIII",
-                id: 3,
-                question: "Jika 3x + 7 = 22, maka nilai dari x + 5 adalah...",
-                options: ["8", "10", "12", "15"],
-                correctAnswer: 1
-            }
-        ];
-
         const MAX_VIOLATIONS = 3;
         const DURATION_MINUTES = 15;
 
@@ -118,16 +91,23 @@
             });
 
             const [questions, setQuestions] = useState(DEFAULT_QUESTIONS);
-            const [mapelList] = useState(["Matematika", "IPAS", "Pancasila & Kewarganegaraan", "Bahasa Indonesia", "Pendidikan Agama Islam", "Bahasa Inggris"]);
+            const [mapelList] = useState(["PAI", "Kemuhammadiyahan", "Bahasa Indonesia", "Bahasa Arab", "IPA", "Seni Rupa", "PKn", "Bahasa Jawa", "Matematika", "Bahasa Inggris", "Informatika", "IPS", "Penjasorkes"]);
             const [kelasList] = useState(["Semua Kelas", "Kelas VII", "Kelas VIII", "Kelas IX"]);
 
             const [tokens, setTokens] = useState({
+                "PAI": "8PAI89",
+                "Kemuhammadiyahan": "KMH564",
+                "Bahasa Indonesia": "B099I8",
+                "Bahasa Arab": "BA6754",
+                "IPA": "65IPA7",
+                "Seni Rupa": "SR653U",
+                "PKn": "PKN543",
+                "Bahasa Jawa": "8769BJ",
+                "Penjasorkes": "PJOK56",
                 "Matematika": "MTK882",
                 "Bahasa Inggris": "BIO123",
-                "Pancasila & Kewarganegaraan": "CBT2026",
-                "Bahasa Indonesia": "BIN771"
-                "Pendidikan Agama Islam": "PAI771"
-                "IPAS": "7IPAS6"
+                "Informatika": "CBT2026",
+                "IPS": "BIN771"
             });
 
             // Form Input Soal State (Guru)
@@ -315,7 +295,7 @@
                     setStep('guru_dashboard');
                     if (gasUrl) fetchResultsFromGas();
                 } else {
-                    setTeacherError("Password Guru salah!");
+                    setTeacherError("Password Guru salah! Gunakan password bawaan: guru123");
                 }
             };
 
@@ -678,6 +658,10 @@
                                                     onChange={(e) => setTeacherPass(e.target.value)}
                                                 />
                                             </div>
+                                            <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                                                <i className="fas fa-circle-info text-indigo-400"></i>
+                                                <span>Password Bawaan: <strong className="text-indigo-300 font-mono">guru123</strong></span>
+                                            </p>
                                         </div>
 
                                         <button
