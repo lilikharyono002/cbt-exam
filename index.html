@@ -151,7 +151,6 @@
                     const res = await fetch(targetUrl);
                     const data = await res.json();
                     if (Array.isArray(data) && data.length > 0) {
-                        // Normalize options to ensure max 4 options and valid array
                         const cleanedData = data.map(q => ({
                             ...q,
                             options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
@@ -317,7 +316,6 @@
                     targetMapel = matchedMapel;
                 }
 
-                // Filter available questions for this mapel and kelas
                 const mapelQuestions = questions.filter(q => {
                     const matchM = !q.mapel || q.mapel.toLowerCase() === targetMapel.toLowerCase();
                     const matchK = !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === student.kelas.toLowerCase();
@@ -325,7 +323,6 @@
                 });
 
                 if (mapelQuestions.length === 0) {
-                    // Fallback to mapel-only filter if specific class filter has no questions yet
                     const mapelOnly = questions.filter(q => !q.mapel || q.mapel.toLowerCase() === targetMapel.toLowerCase());
                     if (mapelOnly.length === 0) {
                         alert(`Belum ada soal tersedia untuk Mata Pelajaran "${targetMapel}".`);
@@ -516,9 +513,9 @@
             if (step === 'login') {
                 return (
                     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl">
+                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-xl">
                             <div className="text-center mb-6">
-                                <div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2 shadow-inner">
+                                <div className="w-16 h-16 bg-slate-950 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
                                     <img 
                                         src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
                                         alt="Logo SMP Muhammadiyah PKBS Surakarta" 
@@ -536,13 +533,13 @@
                             <div className="flex bg-slate-900 p-1 rounded-xl mb-6 border border-slate-700">
                                 <button
                                     onClick={() => setRole('siswa')}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'siswa' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'siswa' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
                                 >
                                     <i className="fas fa-user-graduate mr-1.5"></i> Portal Siswa
                                 </button>
                                 <button
                                     onClick={() => setRole('guru')}
-                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'guru' ? 'bg-blue-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold transition ${role === 'guru' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
                                 >
                                     <i className="fas fa-chalkboard-user mr-1.5"></i> Portal Guru
                                 </button>
@@ -555,7 +552,7 @@
                                         <input
                                             type="text"
                                             placeholder="Contoh: Ahmad Subagja"
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
                                             value={student.name}
                                             onChange={(e) => setStudent({ ...student, name: e.target.value })}
                                         />
@@ -567,7 +564,7 @@
                                             <input
                                                 type="text"
                                                 placeholder="00123456"
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
                                                 value={student.nisn}
                                                 onChange={(e) => setStudent({ ...student, nisn: e.target.value })}
                                             />
@@ -575,7 +572,7 @@
                                         <div>
                                             <label className="block text-xs font-medium text-slate-300 mb-1">Kelas Siswa</label>
                                             <select
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                 value={student.kelas}
                                                 onChange={(e) => setStudent({ ...student, kelas: e.target.value })}
                                             >
@@ -586,21 +583,20 @@
                                         </div>
                                     </div>
 
-                                    {/* Login method selection for students */}
                                     <div className="flex justify-between items-center text-xs pt-1">
                                         <span className="text-slate-400 font-medium">Metode Masuk Ujian:</span>
                                         <div className="flex gap-2">
                                             <button
                                                 type="button"
                                                 onClick={() => setLoginMethod('token')}
-                                                className={`px-2.5 py-1 rounded-md transition ${loginMethod === 'token' ? 'bg-blue-600/30 text-blue-400 border border-blue-500/50' : 'text-slate-500 hover:text-slate-300'}`}
+                                                className={`px-2.5 py-1 rounded-lg border transition ${loginMethod === 'token' ? 'bg-slate-700 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'}`}
                                             >
                                                 Pakai Token
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setLoginMethod('select')}
-                                                className={`px-2.5 py-1 rounded-md transition ${loginMethod === 'select' ? 'bg-blue-600/30 text-blue-400 border border-blue-500/50' : 'text-slate-500 hover:text-slate-300'}`}
+                                                className={`px-2.5 py-1 rounded-lg border transition ${loginMethod === 'select' ? 'bg-slate-700 text-blue-400 border-blue-500/50' : 'bg-slate-900 text-slate-400 border-slate-700 hover:text-slate-200'}`}
                                             >
                                                 Pilih Mapel
                                             </button>
@@ -613,7 +609,7 @@
                                             <input
                                                 type="text"
                                                 placeholder="Contoh: CBT2026 / MTK882"
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-amber-400 font-mono tracking-widest uppercase focus:outline-none focus:border-amber-500"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white font-mono tracking-widest uppercase focus:outline-none focus:border-blue-500 transition"
                                                 value={student.token}
                                                 onChange={(e) => setStudent({ ...student, token: e.target.value })}
                                             />
@@ -622,7 +618,7 @@
                                         <div>
                                             <label className="block text-xs font-medium text-slate-300 mb-1">Mata Pelajaran Ujian</label>
                                             <select
-                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                 value={student.mapel}
                                                 onChange={(e) => setStudent({ ...student, mapel: e.target.value })}
                                             >
@@ -635,7 +631,7 @@
 
                                     <button
                                         onClick={startStudentExam}
-                                        className="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2"
+                                        className="w-full mt-2 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2"
                                     >
                                         <span>Masuk Ruang Ujian</span>
                                         <i className="fas fa-arrow-right"></i>
@@ -650,15 +646,19 @@
                                         <input
                                             type="password"
                                             placeholder="Masukkan password guru..."
-                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+                                            className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 transition"
                                             value={teacherPass}
                                             onChange={(e) => setTeacherPass(e.target.value)}
                                         />
+                                        <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+                                            <i className="fas fa-circle-info text-blue-400"></i>
+                                            <span>Password Bawaan: <strong className="text-slate-200 font-mono">guru123</strong></span>
+                                        </p>
                                     </div>
 
                                     <button
                                         onClick={handleTeacherLogin}
-                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2"
+                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold text-sm transition flex items-center justify-center gap-2"
                                     >
                                         <i className="fas fa-right-to-bracket"></i>
                                         <span>Masuk Dashboard Guru</span>
@@ -690,20 +690,20 @@
                                     <input
                                         type="text"
                                         placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
-                                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 mb-4"
+                                        className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 mb-4 transition"
                                         value={gasUrl}
                                         onChange={(e) => setGasUrl(e.target.value)}
                                     />
                                     <div className="flex justify-end gap-2">
                                         <button
                                             onClick={() => setShowSettingsModal(false)}
-                                            className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs"
+                                            className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
                                         >
                                             Batal
                                         </button>
                                         <button
                                             onClick={() => saveGasUrlSetting(gasUrl)}
-                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold"
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Simpan & Aktifkan
                                         </button>
@@ -741,14 +741,14 @@
                             <div className="flex items-center gap-3">
                                 <button
                                     onClick={() => setShowSettingsModal(true)}
-                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-blue-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-database"></i>
                                     <span>{gasUrl ? "Database Active" : "Set Web App URL"}</span>
                                 </button>
                                 <button
                                     onClick={() => setStep('login')}
-                                    className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-xl text-xs font-medium border border-red-500/30 flex items-center gap-1.5"
+                                    className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-xl text-xs font-medium border border-red-500/30 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-right-from-bracket"></i>
                                     <span>Keluar</span>
@@ -762,7 +762,7 @@
                             <div className="w-full md:w-64 bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-1.5 h-fit">
                                 <button
                                     onClick={() => setActiveGuruMenu('input_soal')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'input_soal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'input_soal' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-plus-circle text-base"></i>
                                     <span>1. Input Soal Baru</span>
@@ -770,7 +770,7 @@
 
                                 <button
                                     onClick={() => setActiveGuruMenu('daftar_soal')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'daftar_soal' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'daftar_soal' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-list-check text-base"></i>
                                     <span>2. Kelola & Daftar Soal</span>
@@ -781,7 +781,7 @@
                                         setActiveGuruMenu('hasil_ujian');
                                         if (gasUrl) fetchResultsFromGas();
                                     }}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'hasil_ujian' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'hasil_ujian' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-square-poll-vertical text-base"></i>
                                     <span>3. Hasil Ujian Siswa</span>
@@ -789,7 +789,7 @@
 
                                 <button
                                     onClick={() => setActiveGuruMenu('generate_token')}
-                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'generate_token' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+                                    className={`w-full text-left px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-3 transition ${activeGuruMenu === 'generate_token' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
                                 >
                                     <i className="fas fa-key text-base"></i>
                                     <span>4. Generate Token Ujian</span>
@@ -815,7 +815,7 @@
                                                     Langkah 1: Pilih Mata Pelajaran <span className="text-red-400">*</span>
                                                 </label>
                                                 <select
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                     value={selectedMapelInput}
                                                     onChange={(e) => setSelectedMapelInput(e.target.value)}
                                                 >
@@ -830,7 +830,7 @@
                                                     Langkah 2: Pilih Tingkat Kelas <span className="text-red-400">*</span>
                                                 </label>
                                                 <select
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                     value={selectedKelasInput}
                                                     onChange={(e) => setSelectedKelasInput(e.target.value)}
                                                 >
@@ -847,7 +847,7 @@
                                                 <textarea
                                                     rows="3"
                                                     placeholder="Tuliskan pertanyaan di sini..."
-                                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500"
+                                                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition"
                                                     value={formQuestion.question}
                                                     onChange={(e) => setFormQuestion({ ...formQuestion, question: e.target.value })}
                                                 ></textarea>
@@ -859,7 +859,7 @@
                                                 </label>
 
                                                 {['A', 'B', 'C', 'D'].map((letter, optIdx) => (
-                                                    <div key={optIdx} className="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-800">
+                                                    <div key={optIdx} className="flex items-center gap-3 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
                                                         <input
                                                             type="radio"
                                                             name="correctAnswer"
@@ -871,7 +871,7 @@
                                                         <input
                                                             type="text"
                                                             placeholder={`Pilihan jawaban ${letter}...`}
-                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500"
+                                                            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition"
                                                             value={formQuestion.options[optIdx] || ''}
                                                             onChange={(e) => {
                                                                 const newOpt = [...formQuestion.options];
@@ -893,7 +893,7 @@
                                                 <button
                                                     disabled={isSavingQuestion}
                                                     onClick={handleSaveQuestion}
-                                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-emerald-600/30 transition flex items-center gap-2"
+                                                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-2"
                                                 >
                                                     <i className="fas fa-floppy-disk"></i>
                                                     <span>{isSavingQuestion ? "Menyimpan..." : "Simpan Soal ke Sheet"}</span>
@@ -917,7 +917,7 @@
 
                                             <div className="flex items-center gap-2">
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                     value={filterDaftarMapel}
                                                     onChange={(e) => setFilterDaftarMapel(e.target.value)}
                                                 >
@@ -928,7 +928,7 @@
                                                 </select>
 
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                     value={filterDaftarKelas}
                                                     onChange={(e) => setFilterDaftarKelas(e.target.value)}
                                                 >
@@ -947,10 +947,10 @@
                                                 .map((q, idx) => (
                                                     <div key={q.id || idx} className="bg-slate-950 border border-slate-800 rounded-xl p-4 relative">
                                                         <div className="flex items-center gap-2 mb-2">
-                                                            <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 text-[10px] font-semibold rounded border border-blue-500/30">
+                                                            <span className="px-2 py-0.5 bg-slate-800 text-blue-400 text-[10px] font-semibold rounded border border-slate-700">
                                                                 {q.mapel || 'Umum'}
                                                             </span>
-                                                            <span className="px-2 py-0.5 bg-emerald-600/20 text-emerald-400 text-[10px] font-semibold rounded border border-emerald-500/30">
+                                                            <span className="px-2 py-0.5 bg-slate-800 text-emerald-400 text-[10px] font-semibold rounded border border-slate-700">
                                                                 {q.kelas || 'Semua Kelas'}
                                                             </span>
                                                         </div>
@@ -963,9 +963,9 @@
                                                             {q.options && q.options.map((opt, optIdx) => (
                                                                 <div
                                                                     key={optIdx}
-                                                                    className={`px-2.5 py-1.5 rounded-lg text-xs flex items-center gap-2 border ${q.correctAnswer === optIdx ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/50 font-bold' : 'bg-slate-900 text-slate-400 border-slate-800'}`}
+                                                                    className={`px-3 py-2 rounded-xl text-xs flex items-center gap-2 border ${q.correctAnswer === optIdx ? 'bg-emerald-950/40 text-emerald-300 border-emerald-600/50 font-semibold' : 'bg-slate-900 text-slate-300 border-slate-800'}`}
                                                                 >
-                                                                    <span className="w-4 text-center font-bold">{String.fromCharCode(65 + optIdx)}.</span>
+                                                                    <span className="w-4 text-center font-bold text-slate-400">{String.fromCharCode(65 + optIdx)}.</span>
                                                                     <span className="truncate">{opt}</span>
                                                                     {q.correctAnswer === optIdx && <i className="fas fa-check text-emerald-400 ml-auto"></i>}
                                                                 </div>
@@ -975,14 +975,14 @@
                                                         <div className="flex justify-end gap-2 pt-2 border-t border-slate-900">
                                                             <button
                                                                 onClick={() => setEditingQuestion(q)}
-                                                                className="px-3 py-1 bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 rounded-lg text-xs font-medium border border-amber-500/30 transition flex items-center gap-1"
+                                                                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1"
                                                             >
                                                                 <i className="fas fa-pen-to-square"></i>
                                                                 <span>Edit</span>
                                                             </button>
                                                             <button
                                                                 onClick={() => setDeletingQId(q.id)}
-                                                                className="px-3 py-1 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-xs font-medium border border-red-500/30 transition flex items-center gap-1"
+                                                                className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-red-400 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center gap-1"
                                                             >
                                                                 <i className="fas fa-trash-can"></i>
                                                                 <span>Hapus</span>
@@ -1008,22 +1008,20 @@
 
                                             <div className="flex items-center gap-2">
                                                 <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
+                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition cursor-pointer"
                                                     value={filterKelas}
                                                     onChange={(e) => setFilterKelas(e.target.value)}
                                                 >
                                                     <option value="ALL">Semua Kelas</option>
-                                                    <option value="X IPA 1">X IPA 1</option>
-                                                    <option value="X IPA 2">X IPA 2</option>
-                                                    <option value="XI IPS 1">XI IPS 1</option>
-                                                    <option value="XI IPS 2">XI IPS 2</option>
-                                                    <option value="XII MIPA 1">XII MIPA 1</option>
+                                                    <option value="Kelas X">Kelas X</option>
+                                                    <option value="Kelas XI">Kelas XI</option>
+                                                    <option value="Kelas XII">Kelas XII</option>
                                                 </select>
 
                                                 <button
                                                     disabled={isLoadingResults}
                                                     onClick={fetchResultsFromGas}
-                                                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1"
+                                                    className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
                                                 >
                                                     <i className={`fas fa-rotate ${isLoadingResults ? 'animate-spin' : ''}`}></i>
                                                     <span>Refresh</span>
@@ -1096,14 +1094,14 @@
                                                     <div>
                                                         <h3 className="text-xs font-bold text-white">{m}</h3>
                                                         <p className="text-[10px] text-slate-400 mt-0.5">Token Aktif:</p>
-                                                        <span className="font-mono text-base font-extrabold text-amber-400 tracking-wider">
+                                                        <span className="font-mono text-base font-extrabold text-blue-400 tracking-wider">
                                                             {tokens[m] || 'BELUM DI-GENERATE'}
                                                         </span>
                                                     </div>
 
                                                     <button
                                                         onClick={() => generateNewToken(m)}
-                                                        className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-md shadow-blue-600/30"
+                                                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
                                                     >
                                                         <i className="fas fa-arrows-rotate"></i>
                                                         <span>Generate</span>
@@ -1128,7 +1126,7 @@
                                         <label className="block text-xs text-slate-400 mb-1">Teks Pertanyaan</label>
                                         <textarea
                                             rows="3"
-                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-500"
+                                            className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition"
                                             value={editingQuestion.question}
                                             onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}
                                         ></textarea>
@@ -1141,12 +1139,12 @@
                                                 name="editCorrect"
                                                 checked={editingQuestion.correctAnswer === optIdx}
                                                 onChange={() => setEditingQuestion({ ...editingQuestion, correctAnswer: optIdx })}
-                                                className="accent-amber-500"
+                                                className="accent-blue-500"
                                             />
-                                            <span className="text-xs font-bold text-amber-400 w-4">{letter}.</span>
+                                            <span className="text-xs font-bold text-blue-400 w-4">{letter}.</span>
                                             <input
                                                 type="text"
-                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2 text-xs text-white"
+                                                className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition"
                                                 value={editingQuestion.options[optIdx] || ''}
                                                 onChange={(e) => {
                                                     const newOpts = [...editingQuestion.options];
@@ -1160,13 +1158,13 @@
                                     <div className="flex justify-end gap-2 pt-2">
                                         <button
                                             onClick={() => setEditingQuestion(null)}
-                                            className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs"
+                                            className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
                                         >
                                             Batal
                                         </button>
                                         <button
                                             onClick={handleSaveEditQuestion}
-                                            className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-semibold"
+                                            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Simpan Perubahan
                                         </button>
@@ -1187,13 +1185,13 @@
                                     <div className="flex gap-2">
                                         <button
                                             onClick={() => setDeletingQId(null)}
-                                            className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs"
+                                            className="flex-1 py-2 bg-slate-800 text-slate-300 rounded-xl text-xs hover:bg-slate-700 transition"
                                         >
                                             Batal
                                         </button>
                                         <button
                                             onClick={confirmDeleteQuestion}
-                                            className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold"
+                                            className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Ya, Hapus
                                         </button>
@@ -1208,7 +1206,7 @@
             if (step === 'instructions') {
                 return (
                     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-lg w-full text-white">
+                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-lg w-full text-white shadow-xl">
                             <div className="text-center mb-6">
                                 <div className="w-16 h-16 bg-slate-900/60 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
                                     <img 
@@ -1245,7 +1243,7 @@
                                 </div>
                             </div>
 
-                            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-200 space-y-1.5">
+                            <div className="bg-slate-900/80 border border-amber-500/30 rounded-xl p-4 mb-6 text-xs text-amber-200 space-y-1.5">
                                 <div className="font-bold flex items-center gap-1.5 mb-1 text-amber-400">
                                     <i className="fas fa-triangle-exclamation"></i> PERHATIAN PENTING:
                                 </div>
@@ -1256,7 +1254,7 @@
 
                             <button
                                 onClick={beginTest}
-                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2"
+                                className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold text-sm transition flex items-center justify-center gap-2"
                             >
                                 <i className="fas fa-play"></i>
                                 <span>Saya Mengerti & Mulai Ujian</span>
@@ -1316,7 +1314,7 @@
                                 {currentQ ? (
                                     <div>
                                         <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
-                                            <span className="text-xs font-bold text-blue-400 bg-blue-600/10 px-3 py-1 rounded-lg border border-blue-500/20">
+                                            <span className="text-xs font-bold text-blue-400 bg-slate-800 px-3 py-1 rounded-lg border border-slate-700">
                                                 Soal No. {currentQIndex + 1} / {activeQ.length}
                                             </span>
                                             <button
@@ -1339,7 +1337,7 @@
                                                     <button
                                                         key={optIdx}
                                                         onClick={() => setAnswers({ ...answers, [currentQ.id]: optIdx })}
-                                                        className={`w-full text-left p-3.5 rounded-xl border text-xs sm:text-sm flex items-center gap-3 transition ${isSelected ? 'bg-blue-600/20 border-blue-500 text-white font-semibold shadow-md' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
+                                                        className={`w-full text-left p-3.5 rounded-xl border text-xs sm:text-sm flex items-center gap-3 transition ${isSelected ? 'bg-slate-800 border-blue-500 text-white font-semibold' : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'}`}
                                                     >
                                                         <span className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400'}`}>
                                                             {String.fromCharCode(65 + optIdx)}
@@ -1367,7 +1365,7 @@
                                     {currentQIndex === activeQ.length - 1 ? (
                                         <button
                                             onClick={() => setShowSubmitModal(true)}
-                                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/30"
+                                            className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5"
                                         >
                                             <span>Kumpulkan</span>
                                             <i className="fas fa-paper-plane"></i>
@@ -1415,8 +1413,8 @@
 
                         {showViolationModal && (
                             <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-red-500/50 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
-                                    <div className="w-14 h-14 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-red-500/30 animate-bounce">
+                                <div className="bg-slate-900 border border-red-500/50 rounded-2xl p-6 max-w-sm w-full text-center">
+                                    <div className="w-14 h-14 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-red-500/30">
                                         <i className="fas fa-triangle-exclamation text-2xl"></i>
                                     </div>
                                     <h3 className="text-base font-bold text-white mb-1">PERINGATAN PELANGGARAN!</h3>
@@ -1431,7 +1429,7 @@
                                             setShowViolationModal(false);
                                             requestFullscreenMode();
                                         }}
-                                        className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-red-600/30"
+                                        className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold transition"
                                     >
                                         SAYA MENGERTI & KEMBALI UJIAN
                                     </button>
@@ -1441,7 +1439,7 @@
 
                         {showSubmitModal && (
                             <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl">
+                                <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 max-w-sm w-full text-center">
                                     <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-500/30">
                                         <i className="fas fa-paper-plane text-xl"></i>
                                     </div>
@@ -1458,7 +1456,7 @@
                                         </button>
                                         <button
                                             onClick={() => submitExam(false, "Selesai Tepat Waktu")}
-                                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition shadow-lg shadow-emerald-600/30"
+                                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition"
                                         >
                                             Ya, Selesai
                                         </button>
@@ -1474,7 +1472,7 @@
                 const { correct, total, score } = calculateScore();
                 return (
                     <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center">
+                        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full text-center shadow-xl">
                             <div className="w-16 h-16 bg-slate-900/60 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-slate-700 p-2">
                                 <img 
                                     src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
