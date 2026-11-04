@@ -12,7 +12,6 @@
     <!-- Babel standalone for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script>
-        // Konfigurasi Babel untuk menggunakan React classic runtime (React.createElement)
         if (window.Babel) {
             Babel.registerPreset('react-classic', {
                 presets: [
@@ -147,7 +146,7 @@
                 kelas: "Kelas VII",
                 id: 2,
                 type: "menjodohkan",
-                question: "Jodohkan organel sel berikut dengan fungsinya yang tepat:",
+                question: "Pasangkanlah pernyataan di sebelah kiri dengan pasangan yang tepat di sebelah kanan:",
                 imageUrl: "",
                 pairs: [
                     { left: "Mitokondria", right: "Respirasi Sel & Energi" },
@@ -175,7 +174,6 @@
         ];
 
         const MAX_VIOLATIONS = 3;
-        const DURATION_MINUTES = 15;
 
         // Error Boundary untuk menangkap crash runtime React
         class ErrorBoundary extends Component {
@@ -267,22 +265,38 @@
                 "Penjasorkes": "PJK2026"
             });
 
+            // Durasi Ujian per Mapel (dalam menit)
+            const [mapelDurations, setMapelDurations] = useState({
+                "PAI": 60,
+                "Kemuhammadiyahan": 60,
+                "Bahasa Indonesia": 60,
+                "Bahasa Arab": 60,
+                "IPA": 60,
+                "Seni Rupa": 60,
+                "PKn": 60,
+                "Bahasa Jawa": 60,
+                "Matematika": 90,
+                "Bahasa Inggris": 60,
+                "Informatika": 60,
+                "IPS": 60,
+                "Penjasorkes": 60
+            });
+
             // Form Input Soal State (Guru)
             const [selectedMapelInput, setSelectedMapelInput] = useState('PAI');
             const [selectedKelasInput, setSelectedKelasInput] = useState('Kelas VII');
             const [selectedTypeInput, setSelectedTypeInput] = useState('pilihan_ganda');
+            const [selectedDurationInput, setSelectedDurationInput] = useState(60);
             
             const [formQuestion, setFormQuestion] = useState({
                 question: '',
                 imageUrl: '',
                 options: ['', '', '', ''],
                 correctAnswer: 0,
-                // State Menjodohkan
                 pairs: [
                     { left: '', right: '' },
                     { left: '', right: '' }
                 ],
-                // State Benar Salah
                 trueFalseAnswer: 'BENAR'
             });
             const [isSavingQuestion, setIsSavingQuestion] = useState(false);
@@ -297,7 +311,7 @@
             const [currentQIndex, setCurrentQIndex] = useState(0);
             const [answers, setAnswers] = useState({});
             const [flagged, setFlagged] = useState({});
-            const [timeLeft, setTimeLeft] = useState(DURATION_MINUTES * 60);
+            const [timeLeft, setTimeLeft] = useState(60 * 60);
             const [violations, setViolations] = useState([]);
             const [isFullscreen, setIsFullscreen] = useState(false);
             const [showViolationModal, setShowViolationModal] = useState(false);
@@ -505,6 +519,8 @@
 
                 setSelectedMapel(matchedMapel);
                 setSelectedKelas(student.kelas);
+                const activeDuration = mapelDurations[matchedMapel] || 60;
+                setTimeLeft(activeDuration * 60);
                 setStep('instructions');
             };
 
@@ -563,14 +579,12 @@
                     ? mapelQuestions 
                     : questions.filter(q => !q.mapel || q.mapel.toLowerCase() === selectedMapel.toLowerCase());
                 
-                // Urutkan Soal berdasarkan Aturan Wajib (PG -> Menjodohkan -> Benar-Salah -> Uraian)
                 return sortQuestionsByRules(filteredList);
             };
 
             const calculateScore = () => {
                 const activeQ = getActiveQuestions();
                 
-                // Hanya hitung soal objektif (PG, Menjodohkan, Benar-Salah). Uraian dikerjakan di kertas.
                 const objectiveQuestions = activeQ.filter(q => q.type !== 'uraian');
                 const totalObjective = objectiveQuestions.length || 1;
                 let correct = 0;
@@ -606,12 +620,8 @@
             };
 
             const handleSaveQuestion = async () => {
-                if (!selectedMapelInput || !selectedKelasInput) {
-                    return;
-                }
-                if (selectedTypeInput !== 'menjodohkan' && !formQuestion.question.trim()) {
-                    return;
-                }
+                if (!selectedMapelInput || !selectedKelasInput) return;
+                if (selectedTypeInput !== 'menjodohkan' && !formQuestion.question.trim()) return;
 
                 setIsSavingQuestion(true);
 
@@ -632,7 +642,7 @@
                 } else if (selectedTypeInput === 'benar_salah') {
                     newQ.correctAnswer = formQuestion.trueFalseAnswer;
                 } else if (selectedTypeInput === 'uraian') {
-                    // Soal Uraian dikerjakan di kertas sekolah
+                    // Uraian dikerjakan di kertas
                 }
 
                 const updated = sortQuestionsByRules([...questions, newQ]);
@@ -762,8 +772,7 @@
                 }
             };
 
-            // RENDER DISPLAY STEP BY STEP
-
+            // STEP 1: LOGIN
             if (step === 'login') {
                 return (
                     <div className="min-h-screen bg-slate-950 flex flex-col justify-center items-center p-4 relative overflow-hidden">
@@ -903,7 +912,8 @@
                                                     onChange={(e) => setTeacherPass(e.target.value)}
                                                 />
                                             </div>
-                                            
+                                            <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
+                                                </p>
                                         </div>
 
                                         <button
@@ -966,6 +976,7 @@
                 );
             }
 
+            // STEP 2: DASHBOARD GURU
             if (step === 'guru_dashboard') {
                 return (
                     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -1053,16 +1064,21 @@
                                                 <i className="fas fa-pen-to-square text-indigo-400"></i>
                                                 <span>Input Soal Ujian Baru</span>
                                             </h2>
-                                            <p className="text-xs text-slate-400">Pilih mata pelajaran, tingkat kelas, dan jenis soal yang ingin dibuat.</p>
+                                            <p className="text-xs text-slate-400">Pilih mata pelajaran, tingkat kelas, jenis soal, dan durasi pengerjaan yang diinginkan.</p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
+                                        {/* BARIS ATAS: MAPEL, KELAS, JENIS SOAL & LAMA WAKTU */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">Mata Pelajaran *</label>
                                                 <select
                                                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={selectedMapelInput}
-                                                    onChange={(e) => setSelectedMapelInput(e.target.value)}
+                                                    onChange={(e) => {
+                                                        const m = e.target.value;
+                                                        setSelectedMapelInput(m);
+                                                        setSelectedDurationInput(mapelDurations[m] || 60);
+                                                    }}
                                                 >
                                                     {mapelList.map((m, idx) => (
                                                         <option key={idx} value={m}>{m}</option>
@@ -1096,9 +1112,32 @@
                                                     <option value="uraian">4. Uraian (Lembar Kertas)</option>
                                                 </select>
                                             </div>
+
+                                            <div>
+                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Lama Waktu Pengerjaan *</label>
+                                                <select
+                                                    className="w-full bg-slate-900 border border-amber-500/40 rounded-xl px-4 py-2.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500 transition cursor-pointer"
+                                                    value={selectedDurationInput}
+                                                    onChange={(e) => {
+                                                        const dur = parseInt(e.target.value);
+                                                        setSelectedDurationInput(dur);
+                                                        setMapelDurations(prev => ({
+                                                            ...prev,
+                                                            [selectedMapelInput]: dur
+                                                        }));
+                                                    }}
+                                                >
+                                                    <option value={30}>30 Menit</option>
+                                                    <option value={45}>45 Menit</option>
+                                                    <option value={60}>60 Menit</option>
+                                                    <option value={90}>90 Menit</option>
+                                                    <option value={120}>120 Menit</option>
+                                                </select>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-4">
+                                            {/* Sembunyikan Teks Pertanyaan & URL Gambar khusus jenis soal Menjodohkan */}
                                             {selectedTypeInput !== 'menjodohkan' && (
                                                 <React.Fragment>
                                                     <div>
@@ -1134,7 +1173,7 @@
                                                                     src={formatImageUrl(formQuestion.imageUrl)} 
                                                                     alt="Preview Soal" 
                                                                     className="max-h-36 rounded-lg object-contain bg-slate-900 border border-slate-800 w-full"
-                                                                    onError={(e) => { e.target.alt = "Gambar tidak dapat dimuat. Pastikan URL valid."; }}
+                                                                    onError={(e) => { e.target.alt = "Gambar tidak dapat dimuat."; }}
                                                                 />
                                                             </div>
                                                         )}
@@ -1183,7 +1222,7 @@
                                                         <button
                                                             type="button"
                                                             onClick={() => setFormQuestion({ ...formQuestion, pairs: [...formQuestion.pairs, { left: '', right: '' }] })}
-                                                            className="px-3 py-1 bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 rounded-lg text-[11px] font-bold border border-indigo-500/30 transition"
+                                                            className="px-3 py-1.5 bg-indigo-600/30 text-indigo-300 hover:bg-indigo-600/50 rounded-xl text-[11px] font-bold border border-indigo-500/30 transition"
                                                         >
                                                             + Tambah Baris Pasangan
                                                         </button>
@@ -1363,7 +1402,6 @@
                                                             </div>
                                                         )}
 
-                                                        {/* RENDER JAWABAN BERDASARKAN TIPE */}
                                                         {q.type === 'pilihan_ganda' && (
                                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
                                                                 {q.options && q.options.map((opt, optIdx) => (
@@ -1595,7 +1633,6 @@
                                         </span>
                                     </div>
 
-                                    {/* Teks Pertanyaan & Gambar (Hanya untuk non-menjodohkan) */}
                                     {editingQuestion.type !== 'menjodohkan' && (
                                         <React.Fragment>
                                             <div>
@@ -1635,7 +1672,6 @@
                                         </React.Fragment>
                                     )}
 
-                                    {/* Edit Komponen Spesifik Berdasarkan Jenis Soal */}
                                     {editingQuestion.type === 'pilihan_ganda' && (
                                         <div className="space-y-2.5">
                                             <label className="block text-xs font-semibold text-slate-300">
@@ -1815,6 +1851,7 @@
                 );
             }
 
+            // STEP 3: PETUNJUK UJIAN SISWA
             if (step === 'instructions') {
                 return (
                     <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
@@ -1850,7 +1887,7 @@
                                     </div>
                                     <div className="flex justify-between border-b border-slate-800/80 pb-2">
                                         <span className="text-slate-400">Durasi Pengerjaan:</span>
-                                        <span className="font-bold text-amber-400">{DURATION_MINUTES} Menit</span>
+                                        <span className="font-bold text-amber-400">{(mapelDurations[selectedMapel] || 60)} Menit</span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-slate-400">Urutan Soal:</span>
@@ -1880,6 +1917,7 @@
                 );
             }
 
+            // STEP 4: RUANG UJIAN SISWA
             if (step === 'exam') {
                 const activeQ = getActiveQuestions();
                 const currentQ = activeQ[currentQIndex] || activeQ[0];
@@ -1971,8 +2009,6 @@
                                         )}
 
                                         {/* TAMPILAN JAWABAN BERDASARKAN TIPE SOAL */}
-
-                                        {/* 1. PILIHAN GANDA */}
                                         {currentQ.type === 'pilihan_ganda' && (
                                             <div className="space-y-3">
                                                 {(Array.isArray(currentQ.options) ? currentQ.options : []).map((opt, optIdx) => {
@@ -1993,7 +2029,6 @@
                                             </div>
                                         )}
 
-                                        {/* 2. MENJODOHKAN */}
                                         {currentQ.type === 'menjodohkan' && (
                                             <div className="space-y-3">
                                                 <p className="text-xs text-indigo-300 font-medium mb-2">
@@ -2027,7 +2062,6 @@
                                             </div>
                                         )}
 
-                                        {/* 3. BENAR - SALAH */}
                                         {currentQ.type === 'benar_salah' && (
                                             <div className="grid grid-cols-2 gap-4 mt-4">
                                                 <button
@@ -2048,7 +2082,6 @@
                                             </div>
                                         )}
 
-                                        {/* 4. URAIAN (KERTAS UJIAN) */}
                                         {currentQ.type === 'uraian' && (
                                             <div className="space-y-4">
                                                 <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-xs text-amber-200 leading-relaxed flex items-start gap-3">
@@ -2190,7 +2223,6 @@
                             </div>
                         )}
 
-                        {/* Modal Zoom Gambar Soal Fullscreen */}
                         {zoomedImage && (
                             <div 
                                 className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4 cursor-pointer"
@@ -2216,6 +2248,7 @@
                 );
             }
 
+            // STEP 5: HASIL SELESAI UJIAN
             if (step === 'result') {
                 const { correct, total, score } = calculateScore();
                 return (
