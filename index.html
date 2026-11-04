@@ -61,7 +61,7 @@
 </head>
 <body class="bg-slate-950 text-slate-100 antialiased min-h-screen selection:bg-indigo-500 selection:text-white">
     <div id="root">
-        <!-- Loading Fallback jika JS lambat dimuat -->
+        <!-- Loading Fallback -->
         <div class="min-h-screen flex flex-col items-center justify-center p-4 text-center">
             <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
             <p className="text-slate-400 text-sm font-semibold">Memuat Aplikasi CBT EXAM...</p>
@@ -72,6 +72,8 @@
         const { useState, useEffect, useRef, Component } = React;
 
         const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbztLyZuduyezaFqLLGK8hkg71lsiVxmrYTLEhteNx8ZCKUCabi8s-EIjYdLSYbXsYSy5g/exec";
+        const SESSION_KEY = 'cbt_exam_session_data';
+        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 Menit
 
         // Constants untuk Tipe Soal & Urutan Wajib
         const QUESTION_TYPES = {
@@ -117,7 +119,7 @@
             return trimmed;
         };
 
-        // Fungsi pengurutan otomatis soal: 1. Pilihan Ganda -> 2. Menjodohkan -> 3. Benar-Salah -> 4. Uraian
+        // Pengurutan otomatis: 1. Pilihan Ganda -> 2. Menjodohkan -> 3. Benar-Salah -> 4. Uraian
         const sortQuestionsByRules = (qList) => {
             return [...qList].sort((a, b) => {
                 const orderA = TYPE_ORDER[a.type || 'pilihan_ganda'] || 1;
@@ -129,7 +131,25 @@
             });
         };
 
-        // Soal Bawaan Sampel untuk 4 Jenis Soal
+        const saveSessionState = (data) => {
+            try {
+                const payload = {
+                    timestamp: Date.now(),
+                    data: data
+                };
+                localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+            } catch (e) {
+                console.error("Gagal menyimpan sesi:", e);
+            }
+        };
+
+        const clearSessionState = () => {
+            try {
+                localStorage.removeItem(SESSION_KEY);
+            } catch (e) {}
+        };
+
+        // Soal Sampel
         const DEFAULT_QUESTIONS = [
             {
                 mapel: "Matematika",
@@ -175,7 +195,7 @@
 
         const MAX_VIOLATIONS = 3;
 
-        // Error Boundary untuk menangkap crash runtime React
+        // Error Boundary
         class ErrorBoundary extends Component {
             constructor(props) {
                 super(props);
@@ -196,10 +216,13 @@
                                 <h2 className="text-lg font-bold text-white mb-2">Terjadi Kendala Memuat Aplikasi</h2>
                                 <p className="text-xs text-slate-400 mb-4">{this.state.error?.toString()}</p>
                                 <button 
-                                    onClick={() => window.location.reload()} 
+                                    onClick={() => {
+                                        clearSessionState();
+                                        window.location.reload();
+                                    }} 
                                     className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
                                 >
-                                    Muat Ulang Halaman
+                                    Reset & Muat Ulang
                                 </button>
                             </div>
                         </div>
@@ -250,7 +273,7 @@
             // Tingkat Kelas Resmi
             const [kelasList] = useState(["Semua Kelas", "Kelas VII", "Kelas VIII", "Kelas IX"]);
 
-            // Token Bawaan per Mapel
+            // Token Bawaan
             const [tokens, setTokens] = useState({
                 "PAI": "PAI2026",
                 "Kemuhammadiyahan": "KMD2026",
@@ -267,21 +290,11 @@
                 "Penjasorkes": "PJK2026"
             });
 
-            // Durasi Ujian per Mapel (dalam menit)
+            // Durasi Ujian per Mapel (menit)
             const [mapelDurations, setMapelDurations] = useState({
-                "PAI": 60,
-                "Kemuhammadiyahan": 60,
-                "Bahasa Indonesia": 60,
-                "Bahasa Arab": 60,
-                "IPA": 60,
-                "Seni Rupa": 60,
-                "PKn": 60,
-                "Bahasa Jawa": 60,
-                "Matematika": 90,
-                "Bahasa Inggris": 60,
-                "Informatika": 60,
-                "IPS": 60,
-                "Penjasorkes": 60
+                "PAI": 60, "Kemuhammadiyahan": 60, "Bahasa Indonesia": 60, "Bahasa Arab": 60,
+                "IPA": 60, "Seni Rupa": 60, "PKn": 60, "Bahasa Jawa": 60, "Matematika": 90,
+                "Bahasa Inggris": 60, "Informatika": 60, "IPS": 60, "Penjasorkes": 60
             });
 
             // Form Input Soal State (Guru)
@@ -323,6 +336,58 @@
             const [isSubmittingGas, setIsSubmittingGas] = useState(false);
 
             const timerRef = useRef(null);
+
+            // PEMULIHAN SESI OTOMATIS SAAT REFRESH (30 MIN)
+            useEffect(() => {
+                try {
+                    const raw = localStorage.getItem(SESSION_KEY);
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const now = Date.now();
+                        if (parsed.timestamp && (now - parsed.timestamp < SESSION_TIMEOUT)) {
+                            const s = parsed.data;
+                            if (s && s.step && s.step !== 'login' && s.step !== 'result') {
+                                setRole(s.role || 'siswa');
+                                setStep(s.step);
+                                if (s.student) setStudent(s.student);
+                                if (s.selectedMapel) setSelectedMapel(s.selectedMapel);
+                                if (s.selectedKelas) setSelectedKelas(s.selectedKelas);
+                                if (s.selectedTeacherMapel) setSelectedTeacherMapel(s.selectedTeacherMapel);
+                                if (s.answers) setAnswers(s.answers);
+                                if (s.flagged) setFlagged(s.flagged);
+                                if (s.currentQIndex !== undefined) setCurrentQIndex(s.currentQIndex);
+                                if (s.timeLeft !== undefined) setTimeLeft(s.timeLeft);
+                                if (s.violations) setViolations(s.violations);
+                                if (s.activeGuruMenu) setActiveGuruMenu(s.activeGuruMenu);
+                            }
+                        } else {
+                            localStorage.removeItem(SESSION_KEY);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Gagal membaca sesi tersimpan:", e);
+                }
+            }, []);
+
+            // SIMPAN SESI SETIAP ADA PERUBAHAN
+            useEffect(() => {
+                if (step !== 'login' && step !== 'result') {
+                    saveSessionState({
+                        role,
+                        step,
+                        student,
+                        selectedMapel,
+                        selectedKelas,
+                        selectedTeacherMapel,
+                        answers,
+                        flagged,
+                        currentQIndex,
+                        timeLeft,
+                        violations,
+                        activeGuruMenu
+                    });
+                }
+            }, [role, step, student, selectedMapel, selectedKelas, selectedTeacherMapel, answers, flagged, currentQIndex, timeLeft, violations, activeGuruMenu]);
 
             useEffect(() => {
                 if (gasUrl) {
@@ -566,6 +631,7 @@
                 }
                 setShowSubmitModal(false);
                 setShowViolationModal(false);
+                clearSessionState();
                 setStep('result');
 
                 if (gasUrl) {
@@ -606,7 +672,6 @@
                 return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
             };
 
-            // SIMPAN PERUBAHAN EDIT SOAL KEDALAM SPREADSHEET (SYNC UPDATE)
             const handleSaveEditQuestion = async () => {
                 if (!editingQuestion) return;
                 if (editingQuestion.type !== 'menjodohkan' && !editingQuestion.question.trim()) return;
@@ -632,7 +697,6 @@
                 }
             };
 
-            // HAPUS SOAL DARI SPREADSHEET (SYNC DELETE)
             const confirmDeleteQuestion = async () => {
                 if (!deletingQId) return;
                 const targetId = deletingQId;
@@ -683,7 +747,7 @@
                 let newQ = {
                     mapel: selectedTeacherMapel,
                     kelas: selectedKelasInput,
-                    id: Date.now(), // Gunakan timestamp sebagai unique ID yang presisi
+                    id: Date.now(),
                     type: selectedTypeInput,
                     question: selectedTypeInput === 'menjodohkan' ? (formQuestion.question.trim() || 'Pasangkanlah pernyataan di sebelah kiri dengan pasangan yang tepat di sebelah kanan:') : formQuestion.question,
                     imageUrl: selectedTypeInput === 'menjodohkan' ? '' : formatImageUrl(formQuestion.imageUrl)
@@ -697,7 +761,7 @@
                 } else if (selectedTypeInput === 'benar_salah') {
                     newQ.correctAnswer = formQuestion.trueFalseAnswer;
                 } else if (selectedTypeInput === 'uraian') {
-                    // Soal Uraian
+                    // Uraian
                 }
 
                 const updated = sortQuestionsByRules([...questions, newQ]);
@@ -805,6 +869,14 @@
                 } finally {
                     setIsLoadingResults(false);
                 }
+            };
+
+            const handleLogout = () => {
+                clearSessionState();
+                setStep('login');
+                setStudent({ name: '', nisn: '', kelas: 'Kelas VII', token: '' });
+                setTeacherPass('');
+                setSelectedTeacherMapel('');
             };
 
             // STEP 1: LOGIN
@@ -1046,7 +1118,7 @@
                                         <span>{gasUrl ? "Database Sheets Aktif" : "Set Web App URL"}</span>
                                     </button>
                                     <button
-                                        onClick={() => setStep('login')}
+                                        onClick={handleLogout}
                                         className="px-3.5 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl text-xs font-semibold border border-red-500/30 flex items-center gap-1.5 transition"
                                     >
                                         <i className="fas fa-right-from-bracket"></i>
@@ -1132,7 +1204,7 @@
                                 </button>
 
                                 <button
-                                    onClick={() => setStep('login')}
+                                    onClick={handleLogout}
                                     className="px-3.5 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl text-xs font-semibold border border-red-500/30 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-right-from-bracket"></i>
@@ -1278,7 +1350,8 @@
                                                                 <img 
                                                                     src={formatImageUrl(formQuestion.imageUrl)} 
                                                                     alt="Preview Soal" 
-                                                                    className="max-h-36 rounded-lg object-contain bg-slate-900 border border-slate-800 w-full"
+                                                                    className="max-h-36 rounded-lg object-contain bg-slate-900 border border-slate-800 w-full cursor-pointer"
+                                                                    onClick={() => setZoomedImage(formatImageUrl(formQuestion.imageUrl))}
                                                                     onError={(e) => { e.target.alt = "Gambar tidak dapat dimuat."; }}
                                                                 />
                                                             </div>
@@ -1496,7 +1569,7 @@
                                                         </p>
 
                                                         {q.imageUrl && (
-                                                            <div className="mb-3 max-w-xs rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1.5">
+                                                            <div className="mb-3 max-w-xs rounded-xl overflow-hidden border border-slate-800 bg-slate-950 p-1.5 cursor-pointer" onClick={() => setZoomedImage(formatImageUrl(q.imageUrl))}>
                                                                 <img 
                                                                     src={formatImageUrl(q.imageUrl)} 
                                                                     alt="Gambar Soal" 
@@ -1760,7 +1833,8 @@
                                                         <img 
                                                             src={formatImageUrl(editingQuestion.imageUrl)} 
                                                             alt="Preview Gambar" 
-                                                            className="max-h-28 rounded-lg object-contain w-full bg-slate-900 border border-slate-800"
+                                                            className="max-h-28 rounded-lg object-contain w-full bg-slate-900 border border-slate-800 cursor-pointer"
+                                                            onClick={() => setZoomedImage(formatImageUrl(editingQuestion.imageUrl))}
                                                             onError={(e) => { e.target.style.display = 'none'; }}
                                                         />
                                                     </div>
@@ -1945,7 +2019,7 @@
                             </div>
                         )}
 
-                        {/* Modal Preview Soal Siswa */}
+                        {/* Modal Preview Soal Guru */}
                         {showPreviewModal && (
                             <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
                                 <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-4xl w-full h-[90vh] flex flex-col shadow-2xl">
@@ -2004,7 +2078,7 @@
                                                         </p>
 
                                                         {currentPreviewQ.imageUrl && (
-                                                            <div className="mb-4 max-w-md mx-auto text-center bg-slate-950 p-2 rounded-xl border border-slate-800">
+                                                            <div className="mb-4 max-w-md mx-auto text-center bg-slate-950 p-2 rounded-xl border border-slate-800 cursor-pointer" onClick={() => setZoomedImage(formatImageUrl(currentPreviewQ.imageUrl))}>
                                                                 <img 
                                                                     src={formatImageUrl(currentPreviewQ.imageUrl)} 
                                                                     alt="Preview Soal" 
@@ -2113,6 +2187,378 @@
                 );
             }
 
+            // STEP 3: PETUNJUK SISWA
+            if (step === 'instructions') {
+                return (
+                    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+                        <div className="w-full max-w-lg relative z-10">
+                            <div className="glass-panel border border-slate-800 rounded-3xl p-7 sm:p-9 shadow-2xl text-white">
+                                <div className="text-center mb-6">
+                                    <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-indigo-500/30 p-2">
+                                        <img 
+                                            src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                            alt="Logo" 
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.target.onerror = null; 
+                                                e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                            }}
+                                        />
+                                    </div>
+                                    <h2 className="text-xl font-black">Petunjuk & Aturan Ujian</h2>
+                                    <p className="text-xs text-indigo-400 font-bold mt-0.5 uppercase tracking-wide">SMP Muhammadiyah PKBS Surakarta</p>
+                                    <div className="inline-block mt-2 px-3 py-1 bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 font-bold rounded-xl text-xs">
+                                        {selectedMapel} - {student.kelas}
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-2.5 mb-6 text-xs text-slate-300">
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">Nama Peserta:</span>
+                                        <span className="font-bold text-white">{student.name}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">NISN:</span>
+                                        <span className="font-bold text-white font-mono">{student.nisn}</span>
+                                    </div>
+                                    <div className="flex justify-between border-b border-slate-800/80 pb-2">
+                                        <span className="text-slate-400">Durasi Pengerjaan:</span>
+                                        <span className="font-bold text-amber-400">{mapelDurations[selectedMapel] || 60} Menit</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-400">Batas Toleransi Pelanggaran:</span>
+                                        <span className="font-bold text-red-400">Maksimal {MAX_VIOLATIONS} Kali</span>
+                                    </div>
+                                </div>
+
+                                <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 mb-6 text-xs text-amber-200 space-y-1.5">
+                                    <div className="font-bold flex items-center gap-2 mb-1 text-amber-400">
+                                        <i className="fas fa-triangle-exclamation text-sm"></i> ATURAN PENTING & KEAMANAN UJIAN:
+                                    </div>
+                                    <p>1. Ujian berjalan dalam mode <strong>Layar Penuh (Fullscreen)</strong> secara wajib.</p>
+                                    <p>2. Dilarang berpindah tab, berpindah aplikasi, meminimize window, atau menekan tombol F12 / PrintScreen / Copy-Paste.</p>
+                                    <p>3. Jika melakukan pelanggaran sebanyak {MAX_VIOLATIONS}x, sistem akan <strong>OTOMATIS MENGHENTIKAN UJIAN & MENDISKUALIFIKASI</strong>.</p>
+                                </div>
+
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={handleLogout}
+                                        className="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-2xl font-bold text-xs transition"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button
+                                        onClick={beginTest}
+                                        className="flex-1 py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2"
+                                    >
+                                        <i className="fas fa-play"></i>
+                                        <span>Saya Mengerti & Mulai Pengerjaan</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // STEP 4: RUANG UJIAN SISWA
+            if (step === 'exam') {
+                const activeQ = getActiveQuestions();
+                const currentQ = activeQ[currentQIndex] || activeQ[0];
+
+                return (
+                    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                        <header className="bg-slate-900/90 border-b border-slate-800/80 px-4 py-3 sticky top-0 z-30 backdrop-blur-md flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 bg-slate-950 rounded-xl flex items-center justify-center border border-indigo-500/30 p-1">
+                                    <img 
+                                        src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                        alt="Logo" 
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                            e.target.onerror = null; 
+                                            e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <h1 className="text-xs sm:text-sm font-bold text-white line-clamp-1">{selectedMapel}</h1>
+                                    <p className="text-[10px] text-indigo-400 font-medium">{student.name} ({student.kelas})</p>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                                <div className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 ${violations.length > 0 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-slate-800 text-slate-400 border border-slate-700'}`}>
+                                    <i className="fas fa-shield-halved"></i>
+                                    <span>Pelanggaran: {violations.length}/{MAX_VIOLATIONS}</span>
+                                </div>
+
+                                <div className={`px-3 py-1 rounded-xl font-mono text-xs sm:text-sm font-extrabold flex items-center gap-2 ${timeLeft < 180 ? 'bg-red-600 text-white animate-pulse shadow-lg shadow-red-600/40' : 'bg-slate-800 text-amber-400 border border-slate-700'}`}>
+                                    <i className="fas fa-clock"></i>
+                                    <span>{formatTime(timeLeft)}</span>
+                                </div>
+
+                                <button
+                                    onClick={() => setShowSubmitModal(true)}
+                                    className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-emerald-600/20"
+                                >
+                                    Selesai Ujian
+                                </button>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto flex flex-col md:flex-row gap-6">
+                            <div className="flex-1 flex flex-col justify-between bg-slate-900/80 border border-slate-800/80 rounded-3xl p-5 sm:p-7 backdrop-blur-md shadow-xl">
+                                {currentQ ? (
+                                    <div>
+                                        <div className="flex justify-between items-center mb-5 border-b border-slate-800/80 pb-3.5">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-extrabold text-indigo-300 bg-indigo-950/80 px-3.5 py-1.5 rounded-xl border border-indigo-500/30">
+                                                    Soal Nomor {currentQIndex + 1} dari {activeQ.length}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-violet-300 bg-violet-950/80 px-2.5 py-1.5 rounded-xl border border-violet-500/30 uppercase">
+                                                    {TYPE_LABELS[currentQ.type || 'pilihan_ganda']}
+                                                </span>
+                                            </div>
+
+                                            <button
+                                                onClick={() => setFlagged({ ...flagged, [currentQ.id]: !flagged[currentQ.id] })}
+                                                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${flagged[currentQ.id] ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' : 'bg-slate-800 text-slate-400 hover:text-white border border-slate-700'}`}
+                                            >
+                                                <i className="fas fa-bookmark"></i>
+                                                <span>Ragu-ragu</span>
+                                            </button>
+                                        </div>
+
+                                        <p className="text-sm sm:text-base font-semibold text-white mb-6 leading-relaxed">
+                                            {currentQ.question}
+                                        </p>
+
+                                        {currentQ.imageUrl && (
+                                            <div 
+                                                className="mb-6 max-w-md mx-auto text-center bg-slate-950 p-2 rounded-2xl border border-slate-800 relative group cursor-pointer"
+                                                onClick={() => setZoomedImage(formatImageUrl(currentQ.imageUrl))}
+                                            >
+                                                <img 
+                                                    src={formatImageUrl(currentQ.imageUrl)} 
+                                                    alt="Gambar Soal" 
+                                                    className="max-h-52 w-full object-contain rounded-xl"
+                                                    onError={(e) => { e.target.style.display = 'none'; }}
+                                                />
+                                                <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center rounded-2xl">
+                                                    <span className="bg-indigo-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg">
+                                                        <i className="fas fa-magnifying-glass-plus"></i> Klik untuk Memperbesar
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Tipe 1: PILIHAN GANDA */}
+                                        {currentQ.type === 'pilihan_ganda' && (
+                                            <div className="space-y-3">
+                                                {(Array.isArray(currentQ.options) ? currentQ.options : []).map((opt, optIdx) => {
+                                                    const isSelected = answers[currentQ.id] === optIdx;
+                                                    return (
+                                                        <button
+                                                            key={optIdx}
+                                                            onClick={() => setAnswers({ ...answers, [currentQ.id]: optIdx })}
+                                                            className={`w-full text-left p-4 rounded-2xl border text-xs sm:text-sm flex items-center gap-3.5 transition-all duration-200 ${isSelected ? 'bg-indigo-950/60 border-indigo-500 text-white font-semibold shadow-lg shadow-indigo-950/50' : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:bg-slate-900'}`}
+                                                        >
+                                                            <span className={`w-8 h-8 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 transition ${isSelected ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-800 text-slate-400'}`}>
+                                                                {String.fromCharCode(65 + optIdx)}
+                                                            </span>
+                                                            <span className="flex-1 leading-normal">{opt}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Tipe 2: MENJODOHKAN */}
+                                        {currentQ.type === 'menjodohkan' && (
+                                            <div className="space-y-3">
+                                                <p className="text-xs text-indigo-300 font-semibold">Pilihlah pasangan yang tepat untuk setiap pernyataan di bawah ini:</p>
+                                                {(currentQ.pairs || []).map((pair, pIdx) => {
+                                                    const currentAnsMap = answers[currentQ.id] || {};
+                                                    const selectedRightVal = currentAnsMap[pIdx] || '';
+                                                    return (
+                                                        <div key={pIdx} className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                                            <div className="flex items-center gap-2.5 flex-1">
+                                                                <span className="w-6 h-6 rounded-lg bg-indigo-600/30 text-indigo-300 font-bold text-xs flex items-center justify-center shrink-0">{pIdx + 1}</span>
+                                                                <span className="text-xs font-semibold text-white">{pair.left}</span>
+                                                            </div>
+                                                            <i className="fas fa-arrow-right text-indigo-400 text-xs hidden sm:block"></i>
+                                                            <select
+                                                                className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer w-full sm:w-64"
+                                                                value={selectedRightVal}
+                                                                onChange={(e) => {
+                                                                    const newMap = { ...currentAnsMap, [pIdx]: e.target.value };
+                                                                    setAnswers({ ...answers, [currentQ.id]: newMap });
+                                                                }}
+                                                            >
+                                                                <option value="">-- Pilih Pasangan Jawaban --</option>
+                                                                {(currentQ.pairs || []).map((pRight, rIdx) => (
+                                                                    <option key={rIdx} value={pRight.right}>{pRight.right}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Tipe 3: BENAR - SALAH */}
+                                        {currentQ.type === 'benar_salah' && (
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {['BENAR', 'SALAH'].map((tfVal) => {
+                                                    const isSelected = answers[currentQ.id] === tfVal;
+                                                    return (
+                                                        <button
+                                                            key={tfVal}
+                                                            onClick={() => setAnswers({ ...answers, [currentQ.id]: tfVal })}
+                                                            className={`p-5 rounded-2xl border text-sm font-bold flex items-center justify-center gap-2 transition-all ${isSelected ? (tfVal === 'BENAR' ? 'bg-emerald-950/80 border-emerald-500 text-emerald-300 shadow-lg shadow-emerald-950/50' : 'bg-red-950/80 border-red-500 text-red-300 shadow-lg shadow-red-950/50') : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:bg-slate-900 hover:text-white'}`}
+                                                        >
+                                                            <i className={`fas ${tfVal === 'BENAR' ? 'fa-circle-check text-emerald-400' : 'fa-circle-xmark text-red-400'}`}></i>
+                                                            <span>{tfVal}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* Tipe 4: URAIAN */}
+                                        {currentQ.type === 'uraian' && (
+                                            <div className="bg-indigo-950/40 border border-indigo-500/30 p-5 rounded-2xl text-xs text-indigo-200 leading-relaxed space-y-2">
+                                                <div className="flex items-center gap-2 font-bold text-indigo-300 text-sm">
+                                                    <i className="fas fa-file-pen text-indigo-400"></i>
+                                                    <span>Petunjuk Pengerjaan Uraian:</span>
+                                                </div>
+                                                <p>Soal uraian ini dikerjakan secara manual pada <strong>selembar kertas ujian</strong> yang telah disediakan oleh sekolah / pengawas.</p>
+                                                <p className="text-[11px] text-slate-400">Pastikan menuliskan Nomor Soal, Nama, dan Kelas Anda dengan jelas di lembar kertas ujian tersebut.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-10 text-slate-400 text-xs">Tidak ada soal tersedia untuk mata pelajaran ini.</div>
+                                )}
+
+                                <div className="flex justify-between items-center gap-3 mt-8 pt-4 border-t border-slate-800/80">
+                                    <button
+                                        disabled={currentQIndex === 0}
+                                        onClick={() => setCurrentQIndex(prev => prev - 1)}
+                                        className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 text-slate-300 rounded-xl text-xs font-semibold transition flex items-center gap-1.5"
+                                    >
+                                        <i className="fas fa-chevron-left"></i>
+                                        <span>Sebelumnya</span>
+                                    </button>
+
+                                    {currentQIndex === activeQ.length - 1 ? (
+                                        <button
+                                            onClick={() => setShowSubmitModal(true)}
+                                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-emerald-600/25"
+                                        >
+                                            <span>Kumpulkan</span>
+                                            <i className="fas fa-paper-plane"></i>
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={() => setCurrentQIndex(prev => prev + 1)}
+                                            className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/25"
+                                        >
+                                            <span>Selanjutnya</span>
+                                            <i className="fas fa-chevron-right"></i>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="w-full md:w-64 bg-slate-900/80 border border-slate-800/80 rounded-3xl p-4 h-fit backdrop-blur-md shadow-xl">
+                                <h3 className="text-xs font-bold text-slate-300 mb-3 border-b border-slate-800/80 pb-2 flex items-center gap-2">
+                                    <i className="fas fa-th-large text-indigo-400"></i>
+                                    <span>Navigasi Soal</span>
+                                </h3>
+                                <div className="grid grid-cols-5 gap-2">
+                                    {activeQ.map((q, idx) => {
+                                        const isAnswered = answers[q.id] !== undefined;
+                                        const isFlagged = flagged[q.id];
+                                        const isCurrent = currentQIndex === idx;
+
+                                        let btnClass = 'bg-slate-950/80 text-slate-400 border-slate-800';
+                                        if (isCurrent) btnClass = 'ring-2 ring-indigo-500 bg-indigo-600 text-white font-bold';
+                                        else if (isFlagged) btnClass = 'bg-amber-500 text-slate-950 font-bold';
+                                        else if (isAnswered) btnClass = 'bg-emerald-600 text-white font-semibold';
+
+                                        return (
+                                            <button
+                                                key={q.id || idx}
+                                                onClick={() => setCurrentQIndex(idx)}
+                                                className={`h-9 rounded-xl text-xs border transition flex items-center justify-center ${btnClass}`}
+                                            >
+                                                {idx + 1}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        {showViolationModal && (
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-red-500/50 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
+                                    <div className="w-14 h-14 bg-red-500/20 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-red-500/40">
+                                        <i className="fas fa-triangle-exclamation text-2xl"></i>
+                                    </div>
+                                    <h3 className="text-base font-black text-white mb-1">PERINGATAN PELANGGARAN!</h3>
+                                    <p className="text-xs text-red-400 font-semibold mb-3">
+                                        {violations[violations.length - 1]?.reason || "Tindakan terlarang terdeteksi!"}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mb-5">
+                                        Pelanggaran ke-<strong>{violations.length}</strong> dari maksimal <strong>{MAX_VIOLATIONS}</strong>x.
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setShowViolationModal(false);
+                                            requestFullscreenMode();
+                                        }}
+                                        className="w-full py-3 bg-red-600 hover:bg-red-500 text-white rounded-2xl text-xs font-bold transition shadow-lg shadow-red-600/30"
+                                    >
+                                        SAYA MENGERTI & KEMBALI UJIAN
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {showSubmitModal && (
+                            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+                                <div className="glass-panel border border-slate-800 rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl">
+                                    <div className="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-emerald-500/30">
+                                        <i className="fas fa-paper-plane text-xl"></i>
+                                    </div>
+                                    <h3 className="text-base font-bold text-white mb-1">Kumpulkan Jawaban Ujian?</h3>
+                                    <p className="text-xs text-slate-400 mb-5">
+                                        Terjawab: <strong className="text-emerald-400">{Object.keys(answers).length}</strong> dari {activeQ.length} Soal.
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => setShowSubmitModal(false)}
+                                            className="flex-1 py-2.5 bg-slate-800 text-slate-300 rounded-xl text-xs font-semibold hover:bg-slate-700 transition"
+                                        >
+                                            Kembali
+                                        </button>
+                                        <button
+                                            onClick={() => submitExam(false, "Selesai Tepat Waktu")}
+                                            className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/20"
+                                        >
+                                            Ya, Kumpulkan
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            }
+
             // STEP 5: HASIL SELESAI UJIAN
             if (step === 'result') {
                 const { correct, total, score } = calculateScore();
@@ -2143,7 +2589,10 @@
                                 </div>
 
                                 <button
-                                    onClick={() => window.location.reload()}
+                                    onClick={() => {
+                                        clearSessionState();
+                                        window.location.reload();
+                                    }}
                                     className="w-full py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 transition"
                                 >
                                     Selesai & Kembali ke Login
@@ -2154,7 +2603,24 @@
                 );
             }
 
-            return null;
+            return (
+                <React.Fragment>
+                    {/* LIGHTBOX MODAL ZOOM GAMBAR GLOBAL */}
+                    {zoomedImage && (
+                        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex items-center justify-center p-4" onClick={() => setZoomedImage(null)}>
+                            <div className="relative max-w-4xl max-h-[90vh] p-2 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                    onClick={() => setZoomedImage(null)}
+                                    className="absolute top-4 right-4 w-10 h-10 bg-slate-800/80 hover:bg-slate-700 text-white rounded-2xl flex items-center justify-center text-base z-10 transition shadow-lg"
+                                >
+                                    <i className="fas fa-xmark"></i>
+                                </button>
+                                <img src={zoomedImage} alt="Zoomed" className="max-h-[85vh] max-w-full object-contain rounded-2xl mx-auto" />
+                            </div>
+                        </div>
+                    )}
+                </React.Fragment>
+            );
         }
 
         // Render React setelah DOM Siap
