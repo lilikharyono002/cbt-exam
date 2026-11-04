@@ -335,13 +335,17 @@
                     const res = await fetch(targetUrl);
                     const data = await res.json();
                     if (Array.isArray(data) && data.length > 0) {
-                        const cleanedData = data.map(q => ({
-                            ...q,
-                            type: q.type || 'pilihan_ganda',
-                            imageUrl: formatImageUrl(q.imageUrl || q.image || ''),
-                            options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
-                            correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : 0
-                        }));
+                        const cleanedData = data.map(q => {
+                            const qType = q.type || 'pilihan_ganda';
+                            return {
+                                ...q,
+                                type: qType,
+                                imageUrl: formatImageUrl(q.imageUrl || q.image || ''),
+                                options: Array.isArray(q.options) ? q.options.slice(0, 4) : ["A", "B", "C", "D"],
+                                pairs: Array.isArray(q.pairs) ? q.pairs : [],
+                                correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : (qType === 'benar_salah' ? 'BENAR' : 0)
+                            };
+                        });
                         setQuestions(sortQuestionsByRules(cleanedData));
                     }
                 } catch (err) {
@@ -600,28 +604,64 @@
                 return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
             };
 
-            const handleSaveEditQuestion = () => {
+            // SIMPAN PERUBAHAN EDIT SOAL KEDALAM SPREADSHEET (SYNC UPDATE)
+            const handleSaveEditQuestion = async () => {
                 if (!editingQuestion) return;
                 if (editingQuestion.type !== 'menjodohkan' && !editingQuestion.question.trim()) return;
 
-                setQuestions(prev => sortQuestionsByRules(prev.map(q => q.id === editingQuestion.id ? editingQuestion : q)));
+                const updatedQ = { ...editingQuestion };
+                setQuestions(prev => sortQuestionsByRules(prev.map(q => q.id === updatedQ.id ? updatedQ : q)));
                 setEditingQuestion(null);
+
+                if (gasUrl) {
+                    try {
+                        await fetch(gasUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: JSON.stringify({
+                                action: 'updateQuestion',
+                                ...updatedQ
+                            })
+                        });
+                    } catch (e) {
+                        console.error("Gagal memperbarui soal di Google Sheets", e);
+                    }
+                }
             };
 
-            const confirmDeleteQuestion = () => {
+            // HAPUS SOAL DARI SPREADSHEET (SYNC DELETE)
+            const confirmDeleteQuestion = async () => {
                 if (!deletingQId) return;
-                setQuestions(prev => prev.filter(q => q.id !== deletingQId));
+                const targetId = deletingQId;
+                setQuestions(prev => prev.filter(q => q.id !== targetId));
                 setDeletingQId(null);
+
+                if (gasUrl) {
+                    try {
+                        await fetch(gasUrl, {
+                            method: 'POST',
+                            mode: 'no-cors',
+                            headers: { 'Content-Type': 'text/plain' },
+                            body: JSON.stringify({
+                                action: 'deleteQuestion',
+                                id: targetId
+                            })
+                        });
+                    } catch (e) {
+                        console.error("Gagal menghapus soal dari Google Sheets", e);
+                    }
+                }
             };
 
             const handleTeacherLogin = () => {
                 setTeacherError('');
                 if (teacherPass === 'exampkbs') {
-                    setSelectedTeacherMapel(''); // Reset mapel aktif saat login baru
+                    setSelectedTeacherMapel('');
                     setStep('guru_dashboard');
                     if (gasUrl) fetchResultsFromGas();
                 } else {
-                    setTeacherError("Password Guru salah!");
+                    setTeacherError("Password Guru salah! Gunakan password bawaan: exampkbs");
                 }
             };
 
@@ -641,7 +681,7 @@
                 let newQ = {
                     mapel: selectedTeacherMapel,
                     kelas: selectedKelasInput,
-                    id: questions.length + 1,
+                    id: Date.now(), // Gunakan timestamp sebagai unique ID yang presisi
                     type: selectedTypeInput,
                     question: selectedTypeInput === 'menjodohkan' ? (formQuestion.question.trim() || 'Pasangkanlah pernyataan di sebelah kiri dengan pasangan yang tepat di sebelah kanan:') : formQuestion.question,
                     imageUrl: selectedTypeInput === 'menjodohkan' ? '' : formatImageUrl(formQuestion.imageUrl)
@@ -655,7 +695,7 @@
                 } else if (selectedTypeInput === 'benar_salah') {
                     newQ.correctAnswer = formQuestion.trueFalseAnswer;
                 } else if (selectedTypeInput === 'uraian') {
-                    // Uraian dikerjakan di kertas
+                    // Soal Uraian
                 }
 
                 const updated = sortQuestionsByRules([...questions, newQ]);
@@ -906,7 +946,9 @@
                                                 />
                                             </div>
                                             <p className="text-[11px] text-slate-400 mt-2 flex items-center gap-1.5">
-                                                </p>
+                                                <i className="fas fa-circle-info text-indigo-400"></i>
+                                                <span>Password Bawaan: <strong className="text-indigo-300 font-mono">exampkbs</strong></span>
+                                            </p>
                                         </div>
 
                                         <button
@@ -971,7 +1013,6 @@
 
             // STEP 2: DASHBOARD GURU
             if (step === 'guru_dashboard') {
-                // KONDISI 1: JIKA BELUM MEMILIH MATA PELAJARAN
                 if (!selectedTeacherMapel) {
                     return (
                         <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
@@ -1046,7 +1087,6 @@
                     );
                 }
 
-                // KONDISI 2: SETELAH MATA PELAJARAN DIPILIH
                 return (
                     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                         <header className="bg-slate-900/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md px-6 py-4 flex flex-wrap items-center justify-between gap-4">
@@ -1069,7 +1109,6 @@
                             </div>
 
                             <div className="flex items-center gap-3">
-                                {/* BADGE KETERANGAN MAPEL AKTIF & TOMBOL GANTI MAPEL */}
                                 <div className="flex items-center gap-2 bg-indigo-950/80 border border-indigo-500/30 px-3.5 py-1.5 rounded-xl text-xs">
                                     <span className="text-slate-400 hidden sm:inline">Mapel:</span>
                                     <span className="font-bold text-indigo-300">{selectedTeacherMapel}</span>
@@ -1139,7 +1178,6 @@
                             </div>
 
                             <div className="flex-1 bg-slate-900/80 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-md">
-                                {/* MENU 1: INPUT SOAL */}
                                 {activeGuruMenu === 'input_soal' && (
                                     <div className="space-y-6">
                                         <div className="border-b border-slate-800/80 pb-3 flex items-center justify-between">
@@ -1152,7 +1190,6 @@
                                             </div>
                                         </div>
 
-                                        {/* BARIS ATAS: KELAS, JENIS SOAL & LAMA WAKTU (TANPA DROPDOWN MAPEL) */}
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tingkat Kelas *</label>
@@ -1205,7 +1242,6 @@
                                         </div>
 
                                         <div className="space-y-4">
-                                            {/* Sembunyikan Teks Pertanyaan & URL Gambar khusus jenis soal Menjodohkan */}
                                             {selectedTypeInput !== 'menjodohkan' && (
                                                 <React.Fragment>
                                                     <div>
@@ -1249,7 +1285,6 @@
                                                 </React.Fragment>
                                             )}
 
-                                            {/* INPUT DINAMIS BERDASARKAN JENIS SOAL */}
                                             {selectedTypeInput === 'pilihan_ganda' && (
                                                 <div className="space-y-3">
                                                     <label className="block text-xs font-semibold text-slate-300">
@@ -1400,7 +1435,6 @@
                                     </div>
                                 )}
 
-                                {/* MENU 2: KELOLA BANK SOAL (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'daftar_soal' && (
                                     <div className="space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -1524,7 +1558,6 @@
                                     </div>
                                 )}
 
-                                {/* MENU 3: HASIL UJIAN SISWA (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'hasil_ujian' && (
                                     <div className="space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -1620,7 +1653,6 @@
                                     </div>
                                 )}
 
-                                {/* MENU 4: GENERATE TOKEN UJIAN (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'generate_token' && (
                                     <div className="space-y-4">
                                         <div className="border-b border-slate-800 pb-3">
@@ -2060,7 +2092,6 @@
                                             </div>
                                         )}
 
-                                        {/* TAMPILAN JAWABAN BERDASARKAN TIPE SOAL */}
                                         {currentQ.type === 'pilihan_ganda' && (
                                             <div className="space-y-3">
                                                 {(Array.isArray(currentQ.options) ? currentQ.options : []).map((opt, optIdx) => {
