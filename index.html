@@ -223,10 +223,10 @@
             // State Dashboard Guru
             const [teacherPass, setTeacherPass] = useState('');
             const [teacherError, setTeacherError] = useState('');
+            const [selectedTeacherMapel, setSelectedTeacherMapel] = useState('');
             const [activeGuruMenu, setActiveGuruMenu] = useState('input_soal');
             const [editingQuestion, setEditingQuestion] = useState(null);
             const [deletingQId, setDeletingQId] = useState(null);
-            const [filterDaftarMapel, setFilterDaftarMapel] = useState('ALL');
             const [filterDaftarKelas, setFilterDaftarKelas] = useState('ALL');
             const [copiedTokenMapel, setCopiedTokenMapel] = useState('');
             
@@ -304,7 +304,6 @@
             // Hasil Ujian Teacher State
             const [examResults, setExamResults] = useState([]);
             const [filterKelas, setFilterKelas] = useState('ALL');
-            const [filterHasilMapel, setFilterHasilMapel] = useState('ALL');
             const [isLoadingResults, setIsLoadingResults] = useState(false);
 
             // Exam execution state
@@ -356,6 +355,15 @@
                 localStorage.setItem('cbt_gas_url', trimmed);
                 setShowSettingsModal(false);
                 if (trimmed) fetchQuestionsFromGas(trimmed);
+            };
+
+            const requestFullscreenMode = () => {
+                const element = document.documentElement;
+                if (element.requestFullscreen) {
+                    element.requestFullscreen().then(() => {
+                        setIsFullscreen(true);
+                    }).catch(() => {});
+                }
             };
 
             const addViolation = (reason) => {
@@ -464,25 +472,6 @@
                 };
             }, [step]);
 
-            const requestFullscreenMode = () => {
-                const element = document.documentElement;
-                if (element.requestFullscreen) {
-                    element.requestFullscreen().then(() => {
-                        setIsFullscreen(true);
-                    }).catch(() => {});
-                }
-            };
-
-            const handleTeacherLogin = () => {
-                setTeacherError('');
-                if (teacherPass === 'exampkbs') {
-                    setStep('guru_dashboard');
-                    if (gasUrl) fetchResultsFromGas();
-                } else {
-                    setTeacherError("Password Guru salah!");
-                }
-            };
-
             const startStudentExam = () => {
                 setLoginError('');
                 if (!student.name.trim() || !student.nisn.trim()) {
@@ -503,13 +492,13 @@
                     return;
                 }
 
-                const rawMapelQuestions = questions.filter(q => {
+                const mapelQuestions = questions.filter(q => {
                     const matchM = !q.mapel || q.mapel.toLowerCase() === matchedMapel.toLowerCase();
                     const matchK = !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === student.kelas.toLowerCase();
                     return matchM && matchK;
                 });
 
-                if (rawMapelQuestions.length === 0) {
+                if (mapelQuestions.length === 0) {
                     const mapelOnly = questions.filter(q => !q.mapel || q.mapel.toLowerCase() === matchedMapel.toLowerCase());
                     if (mapelOnly.length === 0) {
                         setLoginError(`Belum ada soal tersedia di bank soal untuk Mata Pelajaran "${matchedMapel}".`);
@@ -519,14 +508,50 @@
 
                 setSelectedMapel(matchedMapel);
                 setSelectedKelas(student.kelas);
-                const activeDuration = mapelDurations[matchedMapel] || 60;
-                setTimeLeft(activeDuration * 60);
                 setStep('instructions');
             };
 
             const beginTest = () => {
                 requestFullscreenMode();
+                const mapelDur = mapelDurations[selectedMapel] || 60;
+                setTimeLeft(mapelDur * 60);
                 setStep('exam');
+            };
+
+            const getActiveQuestions = () => {
+                const mapelQuestions = questions.filter(q => {
+                    const matchM = !q.mapel || q.mapel.toLowerCase() === selectedMapel.toLowerCase();
+                    const matchK = !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === student.kelas.toLowerCase();
+                    return matchM && matchK;
+                });
+                const list = mapelQuestions.length > 0 ? mapelQuestions : questions.filter(q => !q.mapel || q.mapel.toLowerCase() === selectedMapel.toLowerCase());
+                return sortQuestionsByRules(list);
+            };
+
+            const calculateScore = () => {
+                const activeQ = getActiveQuestions();
+                const objectiveQ = activeQ.filter(q => q.type !== 'uraian');
+                const totalObj = objectiveQ.length || 1;
+                let correct = 0;
+
+                objectiveQ.forEach((q) => {
+                    const ans = answers[q.id];
+                    if (q.type === 'pilihan_ganda') {
+                        if (ans === q.correctAnswer) correct++;
+                    } else if (q.type === 'benar_salah') {
+                        if (ans === q.correctAnswer) correct++;
+                    } else if (q.type === 'menjodohkan') {
+                        if (q.pairs && typeof ans === 'object' && ans !== null) {
+                            let allMatch = true;
+                            q.pairs.forEach((p, pIdx) => {
+                                if (ans[pIdx] !== p.right) allMatch = false;
+                            });
+                            if (allMatch && q.pairs.length > 0) correct++;
+                        }
+                    }
+                });
+                const score = (correct / totalObj) * 100;
+                return { correct, total: totalObj, score };
             };
 
             const submitExam = async (forced = false, reason = '') => {
@@ -569,64 +594,52 @@
                 }
             };
 
-            const getActiveQuestions = () => {
-                const mapelQuestions = questions.filter(q => {
-                    const matchM = !q.mapel || q.mapel.toLowerCase() === selectedMapel.toLowerCase();
-                    const matchK = !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === selectedKelas.toLowerCase();
-                    return matchM && matchK;
-                });
-                const filteredList = mapelQuestions.length > 0 
-                    ? mapelQuestions 
-                    : questions.filter(q => !q.mapel || q.mapel.toLowerCase() === selectedMapel.toLowerCase());
-                
-                return sortQuestionsByRules(filteredList);
-            };
-
-            const calculateScore = () => {
-                const activeQ = getActiveQuestions();
-                
-                const objectiveQuestions = activeQ.filter(q => q.type !== 'uraian');
-                const totalObjective = objectiveQuestions.length || 1;
-                let correct = 0;
-
-                objectiveQuestions.forEach((q) => {
-                    const ans = answers[q.id];
-                    if (q.type === 'pilihan_ganda') {
-                        if (ans === q.correctAnswer) correct++;
-                    } else if (q.type === 'benar_salah') {
-                        if (ans === q.correctAnswer) correct++;
-                    } else if (q.type === 'menjodohkan') {
-                        if (ans && typeof ans === 'object') {
-                            const totalPairs = q.pairs ? q.pairs.length : 0;
-                            let matched = 0;
-                            if (q.pairs && totalPairs > 0) {
-                                q.pairs.forEach((p, idx) => {
-                                    if (ans[idx] === p.right) matched++;
-                                });
-                                if (matched === totalPairs) correct++;
-                            }
-                        }
-                    }
-                });
-
-                const score = (correct / totalObjective) * 100;
-                return { correct, total: totalObjective, totalAll: activeQ.length, score };
-            };
-
             const formatTime = (seconds) => {
                 const m = Math.floor(seconds / 60);
                 const s = seconds % 60;
                 return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
             };
 
+            const handleSaveEditQuestion = () => {
+                if (!editingQuestion) return;
+                if (editingQuestion.type !== 'menjodohkan' && !editingQuestion.question.trim()) return;
+
+                setQuestions(prev => sortQuestionsByRules(prev.map(q => q.id === editingQuestion.id ? editingQuestion : q)));
+                setEditingQuestion(null);
+            };
+
+            const confirmDeleteQuestion = () => {
+                if (!deletingQId) return;
+                setQuestions(prev => prev.filter(q => q.id !== deletingQId));
+                setDeletingQId(null);
+            };
+
+            const handleTeacherLogin = () => {
+                setTeacherError('');
+                if (teacherPass === 'exampkbs') {
+                    setSelectedTeacherMapel(''); // Reset mapel aktif saat login baru
+                    setStep('guru_dashboard');
+                    if (gasUrl) fetchResultsFromGas();
+                } else {
+                    setTeacherError("Password Guru salah!");
+                }
+            };
+
+            const selectSubjectForTeacher = (m) => {
+                setSelectedTeacherMapel(m);
+                setSelectedMapelInput(m);
+                setSelectedDurationInput(mapelDurations[m] || 60);
+                setActiveGuruMenu('input_soal');
+            };
+
             const handleSaveQuestion = async () => {
-                if (!selectedMapelInput || !selectedKelasInput) return;
+                if (!selectedTeacherMapel || !selectedKelasInput) return;
                 if (selectedTypeInput !== 'menjodohkan' && !formQuestion.question.trim()) return;
 
                 setIsSavingQuestion(true);
 
                 let newQ = {
-                    mapel: selectedMapelInput,
+                    mapel: selectedTeacherMapel,
                     kelas: selectedKelasInput,
                     id: questions.length + 1,
                     type: selectedTypeInput,
@@ -699,30 +712,10 @@
                 setTimeout(() => setCopiedTokenMapel(''), 2000);
             };
 
-            const handleSaveEditQuestion = () => {
-                if (!editingQuestion) return;
-                if (!editingQuestion.question.trim()) return;
-
-                const formatted = {
-                    ...editingQuestion,
-                    imageUrl: formatImageUrl(editingQuestion.imageUrl)
-                };
-
-                const updated = sortQuestionsByRules(questions.map(q => q.id === formatted.id ? formatted : q));
-                setQuestions(updated);
-                setEditingQuestion(null);
-            };
-
-            const confirmDeleteQuestion = () => {
-                if (!deletingQId) return;
-                setQuestions(prev => prev.filter(q => q.id !== deletingQId));
-                setDeletingQId(null);
-            };
-
             const handleExportCSV = () => {
                 const filtered = examResults.filter(res => 
                     (filterKelas === 'ALL' || res.kelas === filterKelas) &&
-                    (filterHasilMapel === 'ALL' || (res.mapel && res.mapel.toLowerCase() === filterHasilMapel.toLowerCase()))
+                    (res.mapel && res.mapel.toLowerCase() === selectedTeacherMapel.toLowerCase())
                 );
 
                 if (filtered.length === 0) return;
@@ -748,7 +741,7 @@
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement("a");
                 link.setAttribute("href", url);
-                const mapelSuffix = filterHasilMapel === 'ALL' ? 'SemuaMapel' : filterHasilMapel.replace(/\s+/g, '_');
+                const mapelSuffix = selectedTeacherMapel.replace(/\s+/g, '_');
                 const kelasSuffix = filterKelas === 'ALL' ? 'SemuaKelas' : filterKelas.replace(/\s+/g, '_');
                 link.setAttribute("download", `Hasil_Ujian_${mapelSuffix}_${kelasSuffix}.csv`);
                 document.body.appendChild(link);
@@ -978,6 +971,82 @@
 
             // STEP 2: DASHBOARD GURU
             if (step === 'guru_dashboard') {
+                // KONDISI 1: JIKA BELUM MEMILIH MATA PELAJARAN
+                if (!selectedTeacherMapel) {
+                    return (
+                        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+                            <header className="bg-slate-900/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-slate-950 rounded-xl flex items-center justify-center border border-indigo-500/30 p-1">
+                                        <img 
+                                            src="https://lh3.googleusercontent.com/d/1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-" 
+                                            alt="Logo" 
+                                            className="w-full h-full object-contain"
+                                            onError={(e) => {
+                                                e.target.onerror = null; 
+                                                e.target.src = "https://drive.google.com/uc?export=view&id=1H7HH5EXSS5dYsrGcy8RbTAX5x3hEFr1-";
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-base font-bold text-white">Dashboard Guru & Pengawas CBT</h1>
+                                        <p className="text-xs text-indigo-400 font-medium">SMP Muhammadiyah PKBS Surakarta</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        onClick={() => setShowSettingsModal(true)}
+                                        className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
+                                    >
+                                        <i className="fas fa-database"></i>
+                                        <span>{gasUrl ? "Database Sheets Aktif" : "Set Web App URL"}</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setStep('login')}
+                                        className="px-3.5 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl text-xs font-semibold border border-red-500/30 flex items-center gap-1.5 transition"
+                                    >
+                                        <i className="fas fa-right-from-bracket"></i>
+                                        <span>Keluar</span>
+                                    </button>
+                                </div>
+                            </header>
+
+                            <div className="flex-1 max-w-5xl w-full mx-auto p-6 flex flex-col justify-center items-center">
+                                <div className="text-center mb-8">
+                                    <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-indigo-950/80 border border-indigo-500/30 text-indigo-300 rounded-full text-xs font-semibold mb-3">
+                                        <i className="fas fa-book-bookmark text-indigo-400"></i>
+                                        <span>Langkah Pertama</span>
+                                    </div>
+                                    <h2 className="text-2xl font-black text-white">Pilih Mata Pelajaran</h2>
+                                    <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+                                        Silakan pilih mata pelajaran yang ingin Anda kelola untuk menginput soal, melihat bank soal, atau memantau hasil ujian.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 w-full">
+                                    {mapelList.map((m, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => selectSubjectForTeacher(m)}
+                                            className="glass-panel hover:bg-indigo-600/20 hover:border-indigo-500/60 border border-slate-800/80 rounded-2xl p-5 text-center transition-all duration-200 group flex flex-col items-center gap-3 shadow-lg hover:shadow-indigo-600/10 cursor-pointer"
+                                        >
+                                            <div className="w-12 h-12 bg-slate-900 group-hover:bg-indigo-600 text-indigo-400 group-hover:text-white rounded-2xl flex items-center justify-center border border-indigo-500/30 transition-all duration-200 shadow-md">
+                                                <i className="fas fa-book-open text-lg"></i>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xs font-bold text-white group-hover:text-indigo-300 transition-colors">{m}</h3>
+                                                <span className="text-[10px] text-slate-500 mt-0.5 block font-medium">Klik untuk Kelola</span>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // KONDISI 2: SETELAH MATA PELAJARAN DIPILIH
                 return (
                     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
                         <header className="bg-slate-900/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md px-6 py-4 flex flex-wrap items-center justify-between gap-4">
@@ -1000,13 +1069,27 @@
                             </div>
 
                             <div className="flex items-center gap-3">
+                                {/* BADGE KETERANGAN MAPEL AKTIF & TOMBOL GANTI MAPEL */}
+                                <div className="flex items-center gap-2 bg-indigo-950/80 border border-indigo-500/30 px-3.5 py-1.5 rounded-xl text-xs">
+                                    <span className="text-slate-400 hidden sm:inline">Mapel:</span>
+                                    <span className="font-bold text-indigo-300">{selectedTeacherMapel}</span>
+                                    <button
+                                        onClick={() => setSelectedTeacherMapel('')}
+                                        className="ml-1.5 px-2 py-0.5 bg-indigo-600/40 hover:bg-indigo-600 text-white rounded-lg text-[10px] font-bold transition flex items-center gap-1"
+                                        title="Ganti Mata Pelajaran"
+                                    >
+                                        <i className="fas fa-right-left text-[9px]"></i> Ganti Mapel
+                                    </button>
+                                </div>
+
                                 <button
                                     onClick={() => setShowSettingsModal(true)}
                                     className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-medium border border-slate-700 flex items-center gap-1.5 transition"
                                 >
                                     <i className="fas fa-database"></i>
-                                    <span>{gasUrl ? "Database Sheets Aktif" : "Set Web App URL"}</span>
+                                    <span className="hidden sm:inline">{gasUrl ? "Database Sheets" : "Set Web App URL"}</span>
                                 </button>
+
                                 <button
                                     onClick={() => setStep('login')}
                                     className="px-3.5 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-xl text-xs font-semibold border border-red-500/30 flex items-center gap-1.5 transition"
@@ -1059,33 +1142,18 @@
                                 {/* MENU 1: INPUT SOAL */}
                                 {activeGuruMenu === 'input_soal' && (
                                     <div className="space-y-6">
-                                        <div className="border-b border-slate-800/80 pb-3">
-                                            <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                                <i className="fas fa-pen-to-square text-indigo-400"></i>
-                                                <span>Input Soal Ujian Baru</span>
-                                            </h2>
-                                            <p className="text-xs text-slate-400">Pilih mata pelajaran, tingkat kelas, jenis soal, dan durasi pengerjaan yang diinginkan.</p>
+                                        <div className="border-b border-slate-800/80 pb-3 flex items-center justify-between">
+                                            <div>
+                                                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                                                    <i className="fas fa-pen-to-square text-indigo-400"></i>
+                                                    <span>INPUT SOAL UJIAN - {selectedTeacherMapel}</span>
+                                                </h2>
+                                                <p className="text-xs text-slate-400">Pilih tingkat kelas, jenis soal, dan durasi pengerjaan yang diinginkan.</p>
+                                            </div>
                                         </div>
 
-                                        {/* BARIS ATAS: MAPEL, KELAS, JENIS SOAL & LAMA WAKTU */}
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-slate-300 mb-1.5">Mata Pelajaran *</label>
-                                                <select
-                                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-                                                    value={selectedMapelInput}
-                                                    onChange={(e) => {
-                                                        const m = e.target.value;
-                                                        setSelectedMapelInput(m);
-                                                        setSelectedDurationInput(mapelDurations[m] || 60);
-                                                    }}
-                                                >
-                                                    {mapelList.map((m, idx) => (
-                                                        <option key={idx} value={m}>{m}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
+                                        {/* BARIS ATAS: KELAS, JENIS SOAL & LAMA WAKTU (TANPA DROPDOWN MAPEL) */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-950/70 p-4 rounded-2xl border border-slate-800">
                                             <div>
                                                 <label className="block text-xs font-semibold text-slate-300 mb-1.5">Tingkat Kelas *</label>
                                                 <select
@@ -1123,7 +1191,7 @@
                                                         setSelectedDurationInput(dur);
                                                         setMapelDurations(prev => ({
                                                             ...prev,
-                                                            [selectedMapelInput]: dur
+                                                            [selectedTeacherMapel]: dur
                                                         }));
                                                     }}
                                                 >
@@ -1332,30 +1400,19 @@
                                     </div>
                                 )}
 
-                                {/* MENU 2: KELOLA BANK SOAL */}
+                                {/* MENU 2: KELOLA BANK SOAL (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'daftar_soal' && (
                                     <div className="space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                                             <div>
                                                 <h2 className="text-base font-bold text-white flex items-center gap-2">
                                                     <i className="fas fa-list-check text-indigo-400"></i>
-                                                    <span>Bank Soal Terurut ({questions.length} Soal)</span>
+                                                    <span>Bank Soal - {selectedTeacherMapel}</span>
                                                 </h2>
-                                                <p className="text-xs text-slate-400">Soal otomatis tersusun berurutan: Pilihan Ganda ➔ Menjodohkan ➔ Benar-Salah ➔ Uraian.</p>
+                                                <p className="text-xs text-slate-400">Menampilkan seluruh soal terurut untuk {selectedTeacherMapel}.</p>
                                             </div>
 
                                             <div className="flex items-center gap-2">
-                                                <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-                                                    value={filterDaftarMapel}
-                                                    onChange={(e) => setFilterDaftarMapel(e.target.value)}
-                                                >
-                                                    <option value="ALL">Semua Mapel</option>
-                                                    {mapelList.map((m, idx) => (
-                                                        <option key={idx} value={m}>{m}</option>
-                                                    ))}
-                                                </select>
-
                                                 <select
                                                     className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={filterDaftarKelas}
@@ -1371,13 +1428,13 @@
 
                                         <div className="space-y-3">
                                             {questions
-                                                .filter(q => (filterDaftarMapel === 'ALL' || (q.mapel && q.mapel.toLowerCase() === filterDaftarMapel.toLowerCase())) &&
+                                                .filter(q => (q.mapel && q.mapel.toLowerCase() === selectedTeacherMapel.toLowerCase()) &&
                                                             (filterDaftarKelas === 'ALL' || filterDaftarKelas === 'Semua Kelas' || (q.kelas && q.kelas.toLowerCase() === filterDaftarKelas.toLowerCase())))
                                                 .map((q, idx) => (
                                                     <div key={q.id || idx} className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 relative">
                                                         <div className="flex flex-wrap items-center gap-2 mb-2">
                                                             <span className="px-2.5 py-0.5 bg-indigo-950/80 text-indigo-300 text-[10px] font-bold rounded-lg border border-indigo-500/30">
-                                                                {q.mapel || 'Umum'}
+                                                                {q.mapel || selectedTeacherMapel}
                                                             </span>
                                                             <span className="px-2.5 py-0.5 bg-emerald-950/80 text-emerald-300 text-[10px] font-bold rounded-lg border border-emerald-500/30">
                                                                 {q.kelas || 'Semua Kelas'}
@@ -1467,30 +1524,19 @@
                                     </div>
                                 )}
 
-                                {/* MENU 3: HASIL UJIAN SISWA */}
+                                {/* MENU 3: HASIL UJIAN SISWA (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'hasil_ujian' && (
                                     <div className="space-y-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                                             <div>
                                                 <h2 className="text-base font-bold text-white flex items-center gap-2">
                                                     <i className="fas fa-square-poll-vertical text-indigo-400"></i>
-                                                    <span>Rekapitulasi Hasil Ujian Siswa</span>
+                                                    <span>Hasil Ujian Siswa - {selectedTeacherMapel}</span>
                                                 </h2>
-                                                <p className="text-xs text-slate-400">Data nilai dan riwayat pelanggaran kecurangan.</p>
+                                                <p className="text-xs text-slate-400">Rekapitulasi nilai siswa khusus mata pelajaran {selectedTeacherMapel}.</p>
                                             </div>
 
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <select
-                                                    className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-                                                    value={filterHasilMapel}
-                                                    onChange={(e) => setFilterHasilMapel(e.target.value)}
-                                                >
-                                                    <option value="ALL">Semua Mapel</option>
-                                                    {mapelList.map((m, idx) => (
-                                                        <option key={idx} value={m}>{m}</option>
-                                                    ))}
-                                                </select>
-
                                                 <select
                                                     className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
                                                     value={filterKelas}
@@ -1541,7 +1587,7 @@
                                                     {examResults
                                                         .filter(res => 
                                                             (filterKelas === 'ALL' || res.kelas === filterKelas) &&
-                                                            (filterHasilMapel === 'ALL' || (res.mapel && res.mapel.toLowerCase() === filterHasilMapel.toLowerCase()))
+                                                            (res.mapel && res.mapel.toLowerCase() === selectedTeacherMapel.toLowerCase())
                                                         )
                                                         .map((res, idx) => (
                                                             <tr key={idx} className="hover:bg-slate-900 transition">
@@ -1574,46 +1620,52 @@
                                     </div>
                                 )}
 
-                                {/* MENU 4: GENERATE TOKEN UJIAN */}
+                                {/* MENU 4: GENERATE TOKEN UJIAN (KHUSUS MAPEL YANG DIPILIH) */}
                                 {activeGuruMenu === 'generate_token' && (
                                     <div className="space-y-4">
                                         <div className="border-b border-slate-800 pb-3">
                                             <h2 className="text-base font-bold text-white flex items-center gap-2">
                                                 <i className="fas fa-key text-indigo-400"></i>
-                                                <span>Generate Token Ujian Aktif</span>
+                                                <span>Token Ujian Aktif - {selectedTeacherMapel}</span>
                                             </h2>
-                                            <p className="text-xs text-slate-400">Bagikan token aktif ini kepada siswa agar mereka dapat memasuki ujian.</p>
+                                            <p className="text-xs text-slate-400">Bagikan token aktif ini kepada siswa agar dapat memulai ujian {selectedTeacherMapel}.</p>
                                         </div>
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                            {mapelList.map((m, idx) => (
-                                                <div key={idx} className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
-                                                    <div className="space-y-1">
-                                                        <h3 className="text-xs font-bold text-slate-200">{m}</h3>
-                                                        <p className="text-[10px] text-slate-400">Token Masuk Ujian:</p>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-mono text-lg font-black text-indigo-300 tracking-widest uppercase">
-                                                                {tokens[m] || 'N/A'}
-                                                            </span>
-                                                            <button
-                                                                onClick={() => copyToClipboard(tokens[m], m)}
-                                                                className="text-slate-400 hover:text-indigo-400 text-xs transition"
-                                                                title="Salin Token"
-                                                            >
-                                                                <i className={`fas ${copiedTokenMapel === m ? 'fa-check text-emerald-400' : 'fa-copy'}`}></i>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    <button
-                                                        onClick={() => generateNewToken(m)}
-                                                        className="px-3.5 py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20"
-                                                    >
-                                                        <i className="fas fa-arrows-rotate"></i>
-                                                        <span>Generate</span>
-                                                    </button>
+                                        <div className="max-w-md bg-slate-950/80 border border-indigo-500/40 rounded-3xl p-6 space-y-4 shadow-xl">
+                                            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                                                <div>
+                                                    <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider">Mata Pelajaran:</span>
+                                                    <h3 className="text-sm font-bold text-white">{selectedTeacherMapel}</h3>
                                                 </div>
-                                            ))}
+                                                <div className="w-10 h-10 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
+                                                    <i className="fas fa-key text-base"></i>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 text-center">
+                                                <span className="text-[11px] text-slate-400 block mb-1">Token Aktif Saat Ini:</span>
+                                                <span className="font-mono text-3xl font-black text-indigo-300 tracking-widest uppercase block my-1">
+                                                    {tokens[selectedTeacherMapel] || 'N/A'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => copyToClipboard(tokens[selectedTeacherMapel], selectedTeacherMapel)}
+                                                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 border border-slate-700"
+                                                >
+                                                    <i className={`fas ${copiedTokenMapel === selectedTeacherMapel ? 'fa-check text-emerald-400' : 'fa-copy'}`}></i>
+                                                    <span>{copiedTokenMapel === selectedTeacherMapel ? 'Tersalin!' : 'Salin Token'}</span>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => generateNewToken(selectedTeacherMapel)}
+                                                    className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20"
+                                                >
+                                                    <i className="fas fa-arrows-rotate"></i>
+                                                    <span>Generate Baru</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
