@@ -134,49 +134,24 @@
             });
         };
 
-        const filterQuestionsFor = (all, mapel, kelas) => {
-            const byMapel = all.filter(q => !q.mapel || q.mapel.toLowerCase() === (mapel || '').toLowerCase());
-            const byKelas = byMapel.filter(q => !q.kelas || q.kelas === 'Semua Kelas' || q.kelas.toLowerCase() === (kelas || '').toLowerCase());
-            return sortQuestionsByRules(byKelas.length > 0 ? byKelas : byMapel);
-        };
-
         const isAnsweredQ = (q, ans) => {
             if (ans === undefined || ans === null || ans === '') return false;
             if (q.type === 'menjodohkan') return typeof ans === 'object' && Object.keys(ans).length > 0;
             return true;
         };
 
-        const scoreFor = (activeQ, answers) => {
-            const objectiveQ = activeQ.filter(q => q.type !== 'uraian');
-            const total = objectiveQ.length;
-            let correct = 0;
-            objectiveQ.forEach((q) => {
-                const ans = answers[q.id];
-                if (q.type === 'pilihan_ganda' || q.type === 'benar_salah') {
-                    if (ans === q.correctAnswer) correct++;
-                } else if (q.type === 'menjodohkan') {
-                    if (q.pairs && q.pairs.length > 0 && typeof ans === 'object' && ans !== null) {
-                        const allMatch = q.pairs.every((p, i) => ans[i] === p.right);
-                        if (allMatch) correct++;
-                    }
-                }
-            });
-            const score = total > 0 ? (correct / total) * 100 : 0;
-            return { correct, total, score };
-        };
+        // Penilaian dilakukan di SERVER (Kode.gs). Browser tidak memegang kunci jawaban.
 
-        // Acak stabil (berdasarkan id soal) agar kolom kanan "Menjodohkan" tidak berurutan sama dengan kunci
-        const shuffleSeeded = (arr, seed) => {
-            const a = [...arr];
-            let s = (Number(seed) || 1) % 2147483647;
-            if (s <= 0) s += 2147483646;
-            const rnd = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
-            for (let i = a.length - 1; i > 0; i--) {
-                const j = Math.floor(rnd() * (i + 1));
-                [a[i], a[j]] = [a[j], a[i]];
-            }
-            return a;
-        };
+        // Rapikan soal yang diterima dari server (tanpa kunci jawaban)
+        const cleanServerQuestions = (list) => sortQuestionsByRules((list || []).map((q, i) => ({
+            ...q,
+            id: q.id !== undefined && q.id !== '' ? q.id : i + 1,
+            type: q.type || 'pilihan_ganda',
+            imageUrl: formatImageUrl(q.imageUrl || ''),
+            options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
+            pairs: Array.isArray(q.pairs) ? q.pairs : [],
+            rightOptions: Array.isArray(q.rightOptions) ? q.rightOptions : []
+        })));
 
         const readStored = (key, fallback) => {
             try {
@@ -328,7 +303,14 @@
             const [showSubmitModal, setShowSubmitModal] = useState(false);
             const [lockoutReason, setLockoutReason] = useState('');
             const [isSubmittingGas, setIsSubmittingGas] = useState(false);
-            const [result, setResult] = useState({ correct: 0, total: 0, score: 0 });
+            const [result, setResult] = useState({ show: false, correct: 0, total: 0, score: 0 });
+            const [submitError, setSubmitError] = useState('');
+            // Soal ujian siswa: diterima dari server HANYA setelah token valid (tanpa kunci jawaban)
+            const [examQuestions, setExamQuestions] = useState([]);
+            const [ticket, setTicket] = useState('');
+            const [startSeconds, setStartSeconds] = useState(null);
+            const [tampilNilai, setTampilNilai] = useState(false);
+            const [isSavingSetting, setIsSavingSetting] = useState(false);
 
             const [unlockedTypes, setUnlockedTypes] = useState({ 'pilihan_ganda': true });
             const [pendingTransition, setPendingTransition] = useState(null);
@@ -341,7 +323,8 @@
             const submittedRef = useRef(false);
             const lastViolationRef = useRef(0);
             const stateRef = useRef({});
-            stateRef.current = { answers, violations, student, selectedMapel, gasUrl, questions };
+            stateRef.current = { answers, violations, student, selectedMapel, gasUrl, questions, ticket };
+            const lastPayloadRef = useRef(null);
 
             // ---------- Pulihkan sesi saat refresh ----------
             useEffect(() => {
@@ -352,8 +335,10 @@
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < SESSION_TIMEOUT)) {
                         const s = parsed.data;
                         // Hanya sesi siswa yang dipulihkan. Guru cukup login ulang (password tidak disimpan di browser).
-                        if (s && (s.step === 'instructions' || s.step === 'exam')) {
+                        if (s && (s.step === 'instructions' || s.step === 'exam') && s.ticket && Array.isArray(s.examQuestions) && s.examQuestions.length > 0) {
                             setRole('siswa');
+                            setTicket(s.ticket);
+                            setExamQuestions(s.examQuestions);
                             setStep(s.step);
                             if (s.student) setStudent(s.student);
                             if (s.selectedMapel) setSelectedMapel(s.selectedMapel);
@@ -382,10 +367,10 @@
                 if (step === 'instructions' || step === 'exam') {
                     saveSessionState({
                         step, student, selectedMapel, examDuration, answers, flagged,
-                        currentQIndex, timeLeft, violations, unlockedTypes
+                        currentQIndex, timeLeft, violations, unlockedTypes, ticket, examQuestions
                     });
                 }
-            }, [step, student, selectedMapel, examDuration, answers, flagged, currentQIndex, timeLeft, violations, unlockedTypes]);
+            }, [step, student, selectedMapel, examDuration, answers, flagged, currentQIndex, timeLeft, violations, unlockedTypes, ticket, examQuestions]);
 
             // Detik berjalan untuk hitung mundur masa berlaku token di dashboard guru
             useEffect(() => {
@@ -408,12 +393,12 @@
                 return () => clearInterval(id);
             }, [pendingTransition, transitionTimer]);
 
-            // ---------- Ambil soal dari Google Sheets ----------
-            const fetchQuestionsFromGas = async (targetUrl) => {
-                if (!targetUrl) return;
+            // ---------- Guru: ambil bank soal (beserta kunci) dari Google Sheets ----------
+            // Hanya bisa setelah login guru; server menolak tanpa password.
+            const fetchBankSoal = async () => {
+                if (!gasUrl) return;
                 try {
-                    const res = await fetch(targetUrl);
-                    const data = await res.json();
+                    const data = await gasGet({ action: 'getAllQuestions', pass: teacherPass });
                     if (Array.isArray(data)) {
                         const cleaned = data.map((q, i) => {
                             const qType = q.type || 'pilihan_ganda';
@@ -432,11 +417,9 @@
                         setQuestions(sortQuestionsByRules(cleaned));
                     }
                 } catch (err) {
-                    console.error("Gagal mengambil soal dari Google Sheets:", err);
+                    console.error("Gagal mengambil bank soal:", err);
                 }
             };
-
-            useEffect(() => { if (gasUrl) fetchQuestionsFromGas(gasUrl); }, [gasUrl]);
 
             const openSettings = () => { setGasDraft(gasUrl); setShowSettingsModal(true); };
             const saveGasUrlSetting = () => {
@@ -468,38 +451,52 @@
                 setPendingTransition(null);
                 clearSessionState();
 
-                const activeQ = filterQuestionsFor(s.questions, s.selectedMapel, s.student.kelas);
-                const { correct, total, score } = scoreFor(activeQ, s.answers);
-                setResult({ correct, total, score });
+                lastPayloadRef.current = {
+                    action: 'submitExam',
+                    tiket: s.ticket,
+                    jawaban: s.answers,
+                    violationsCount: vio.length,
+                    violationDetails: vio.map(v => `[${v.time}] ${v.reason}`).join(' | ') || 'Tidak ada pelanggaran',
+                    status: reason || (forced ? 'Diskualifikasi / Dihentikan Sistem' : 'Selesai Tepat Waktu')
+                };
+                setResult({ show: false, correct: 0, total: 0, score: 0 });
                 setStep('result');
+                await sendAnswers();
+            };
 
-                if (s.gasUrl) {
-                    setIsSubmittingGas(true);
-                    const payload = {
-                        action: 'submitExam',
-                        name: s.student.name,
-                        nisn: s.student.nisn,
-                        kelas: s.student.kelas,
-                        mapel: s.selectedMapel,
-                        score: score.toFixed(1),
-                        correct,
-                        total,
-                        violationsCount: vio.length,
-                        violationDetails: vio.map(v => `[${v.time}] ${v.reason}`).join(' | ') || 'Tidak ada pelanggaran',
-                        status: reason || (forced ? 'Diskualifikasi / Dihentikan Sistem' : 'Selesai Tepat Waktu')
-                    };
-                    try {
-                        await fetch(s.gasUrl, {
-                            method: 'POST',
-                            mode: 'no-cors',
-                            headers: { 'Content-Type': 'text/plain' },
-                            body: JSON.stringify(payload)
-                        });
-                    } catch (e) {
-                        console.error("Gagal mengirim data ke Google Sheets", e);
-                    } finally {
-                        setIsSubmittingGas(false);
+            // Kirim jawaban; server yang menilai. Aman dikirim ulang (server hanya mencatat sekali).
+            const sendAnswers = async () => {
+                const s = stateRef.current;
+                if (!s.gasUrl || !lastPayloadRef.current) return;
+                setSubmitError('');
+                setIsSubmittingGas(true);
+                try {
+                    let r = null;
+                    for (let attempt = 0; attempt < 3 && !r; attempt++) {
+                        try {
+                            const res = await fetch(s.gasUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                                body: JSON.stringify(lastPayloadRef.current)
+                            });
+                            r = await res.json();
+                        } catch (e) {
+                            await new Promise(ok => setTimeout(ok, 1500));
+                        }
                     }
+                    if (r && r.ok) {
+                        clearSessionState();
+                        setResult({
+                            show: !!r.tampilNilai,
+                            score: Number(r.score) || 0,
+                            correct: Number(r.correct) || 0,
+                            total: Number(r.total) || 0
+                        });
+                    } else {
+                        setSubmitError((r && r.message) || 'Jawaban belum berhasil dikirim. Periksa koneksi internet, lalu tekan "Kirim Ulang".');
+                    }
+                } finally {
+                    setIsSubmittingGas(false);
                 }
             };
 
@@ -603,21 +600,26 @@
 
                 setIsCheckingToken(true);
                 try {
-                    // Token divalidasi di server: harus aktif, belum kedaluwarsa, dan siswa belum pernah mengerjakan mapel ini
+                    // Token divalidasi di server. Soal baru dikirim setelah token valid (tanpa kunci jawaban).
                     const r = await gasGet({
-                        action: 'validateToken',
+                        action: 'mulaiUjian',
                         token: student.token.trim().toUpperCase(),
                         nisn: student.nisn.trim(),
+                        nama: student.name.trim(),
                         kelas: student.kelas
                     });
                     if (!r || !r.ok) {
                         setLoginError((r && r.message) || "Token Ujian tidak valid. Silakan minta token aktif kepada Guru/Pengawas.");
                         return;
                     }
-                    if (filterQuestionsFor(questions, r.mapel, student.kelas).length === 0) {
+                    const soal = cleanServerQuestions(r.questions);
+                    if (soal.length === 0) {
                         setLoginError(`Belum ada soal tersedia di bank soal untuk Mata Pelajaran "${r.mapel}".`);
                         return;
                     }
+                    setExamQuestions(soal);
+                    setTicket(r.tiket);
+                    setStartSeconds(Number(r.sisaDetik) > 0 ? Number(r.sisaDetik) : null);
                     setExamDuration(Number(r.durasi) || 60);
                     setSelectedMapel(r.mapel);
                     setStep('instructions');
@@ -628,7 +630,7 @@
                 }
             };
 
-            const getActiveQuestions = () => filterQuestionsFor(questions, selectedMapel, student.kelas);
+            const getActiveQuestions = () => examQuestions;
 
             const beginTest = () => {
                 const activeQ = getActiveQuestions();
@@ -645,7 +647,7 @@
                 setCurrentQIndex(0);
                 setUnlockedTypes({ [firstType]: true });
                 setPendingTransition(null);
-                setTimeLeft(examDuration * 60);
+                setTimeLeft(startSeconds ? Math.min(examDuration * 60, startSeconds) : examDuration * 60);
                 setStep('exam');
             };
 
@@ -717,6 +719,7 @@
                         setTokenInfo(null);
                         setStep('guru_dashboard');
                         fetchResultsFromGas();
+                        fetchBankSoal();
                     } else {
                         setTeacherError((r && r.message) || "Password Guru salah!");
                     }
@@ -808,6 +811,7 @@
                 try {
                     const r = await gasGet({ action: 'getToken', pass: teacherPass, mapel });
                     if (r && r.ok) {
+                        setTampilNilai(!!r.tampilNilai);
                         setTokenInfo(r.token ? { ...r, fetchedAt: Date.now() } : null);
                     } else {
                         setTokenInfo(null);
@@ -838,6 +842,21 @@
                     setTokenError("Gagal terhubung ke server.");
                 } finally {
                     setIsLoadingToken(false);
+                }
+            };
+
+            const toggleTampilNilai = async (nilaiBaru) => {
+                if (!gasUrl || !selectedTeacherMapel) return;
+                setIsSavingSetting(true);
+                setTokenError('');
+                try {
+                    const r = await gasGet({ action: 'setSetting', pass: teacherPass, mapel: selectedTeacherMapel, tampilNilai: nilaiBaru ? 'true' : 'false' });
+                    if (r && r.ok) setTampilNilai(!!r.tampilNilai);
+                    else setTokenError((r && r.message) || "Gagal menyimpan pengaturan.");
+                } catch (e) {
+                    setTokenError("Gagal terhubung ke server.");
+                } finally {
+                    setIsSavingSetting(false);
                 }
             };
 
@@ -913,6 +932,9 @@
                 examActiveRef.current = false;
                 clearSessionState();
                 setStep('login');
+                setRole('siswa');
+                setExamQuestions([]);
+                setTicket('');
                 setStudent({ name: '', nisn: '', kelas: 'Kelas VII', token: '' });
                 setTeacherPass('');
                 setSelectedTeacherMapel('');
@@ -1726,6 +1748,30 @@
                                                         <i className="fas fa-door-closed"></i><span>Tutup Pintu Masuk Sekarang</span>
                                                     </button>
 
+                                                    <div className="bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 space-y-2">
+                                                        <div className="flex items-center justify-between gap-3">
+                                                            <div>
+                                                                <span className={`text-xs font-bold ${t.title} block`}>Tampilkan nilai setelah ujian</span>
+                                                                <span className={`text-[11px] ${t.sub}`}>Berlaku untuk {selectedTeacherMapel}</span>
+                                                            </div>
+                                                            <button
+                                                                type="button"
+                                                                role="switch"
+                                                                aria-checked={tampilNilai}
+                                                                disabled={isSavingSetting}
+                                                                onClick={() => toggleTampilNilai(!tampilNilai)}
+                                                                className={`relative w-12 h-7 rounded-full transition shrink-0 disabled:opacity-50 ${tampilNilai ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}`}
+                                                            >
+                                                                <span className={`absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform ${tampilNilai ? 'translate-x-5' : ''}`}></span>
+                                                            </button>
+                                                        </div>
+                                                        <p className={`text-[11px] leading-relaxed ${tampilNilai ? 'text-emerald-600 dark:text-emerald-400' : t.sub}`}>
+                                                            {tampilNilai
+                                                                ? 'YA: setelah siswa mengirim jawaban, skor dan jumlah benar langsung terlihat oleh siswa.'
+                                                                : 'TIDAK: siswa hanya melihat tulisan "Ujian Selesai, Jawaban sudah tersimpan." Nilai tetap tercatat di tabel hasil guru.'}
+                                                        </p>
+                                                    </div>
+
                                                     <p className={`text-[11px] ${t.sub} leading-relaxed`}>
                                                         Token hanya bisa dipakai untuk <strong>masuk</strong> selama pintu masuk dibuka. Siswa yang sudah di dalam ruang ujian tetap bisa melanjutkan. Setelah ditutup atau kedaluwarsa, token tidak bisa dipakai lagi (termasuk oleh siswa yang diberi tahu temannya). Siswa yang sudah selesai mengerjakan mapel ini juga ditolak.
                                                     </p>
@@ -2150,7 +2196,7 @@
                                     )}
 
                                     {qType === 'menjodohkan' && (() => {
-                                        const rightOptions = shuffleSeeded((currentQ.pairs || []).map(p => p.right), currentQ.id);
+                                        const rightOptions = currentQ.rightOptions || [];
                                         const cur = (typeof currentAns === 'object' && currentAns) || {};
                                         return (
                                             <div className="space-y-2.5">
@@ -2401,7 +2447,7 @@
             // LAYAR 5: HASIL
             // =====================================================
             if (step === 'result') {
-                const { correct, total, score } = result;
+                const { show: showScore, correct, total, score } = result;
                 return withModals(
                     <div className={`min-h-screen ${t.bg} flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300`}>
                         <div className="w-full max-w-md relative z-10">
@@ -2417,25 +2463,32 @@
                                     <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-3 mb-4 text-xs text-red-600 dark:text-red-300 font-medium">{lockoutReason}</div>
                                 )}
 
-                                <div className={`${t.cardInner} p-6 rounded-2xl mb-4`}>
-                                    <span className={`text-xs ${t.sub} uppercase tracking-wider block font-bold`}>Skor Soal Objektif</span>
-                                    <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 my-2 block">{score.toFixed(0)}</span>
-                                    <span className={`text-xs ${t.sub} block mb-1`}>Benar: <strong className={t.title}>{correct}</strong> dari {total} soal objektif</span>
-                                    <span className="text-[11px] text-amber-600 dark:text-amber-400 italic font-medium">Soal Uraian dinilai terpisah oleh pengawas di lembar kertas.</span>
-                                </div>
-
-                                <p className={`text-[11px] ${t.sub} mb-5`}>
-                                    {isSubmittingGas ? (
-                                        <span><i className="fas fa-spinner fa-spin mr-1"></i> Mengirim jawaban ke server...</span>
-                                    ) : gasUrl ? (
-                                        <span><i className="fas fa-circle-check text-emerald-500 mr-1"></i> Jawaban telah dikirim ke server.</span>
-                                    ) : (
-                                        <span>Server database belum diatur.</span>
-                                    )}
-                                </p>
+                                {isSubmittingGas ? (
+                                    <div className={`${t.cardInner} p-6 rounded-2xl mb-5`}>
+                                        <i className="fas fa-spinner fa-spin text-2xl text-indigo-500 mb-2"></i>
+                                        <p className={`text-xs ${t.sub}`}>Mengirim dan menyimpan jawaban Anda...<br />Jangan tutup halaman ini.</p>
+                                    </div>
+                                ) : submitError ? (
+                                    <div className="bg-red-500/10 border border-red-500/40 rounded-2xl p-4 mb-5 text-xs text-red-600 dark:text-red-300 font-medium space-y-3">
+                                        <p><i className="fas fa-circle-exclamation mr-1"></i>{submitError}</p>
+                                        <button onClick={sendAnswers} className="w-full py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold">Kirim Ulang Jawaban</button>
+                                    </div>
+                                ) : showScore ? (
+                                    <div className={`${t.cardInner} p-6 rounded-2xl mb-5`}>
+                                        <span className={`text-xs ${t.sub} uppercase tracking-wider block font-bold`}>Skor Soal Objektif</span>
+                                        <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 my-2 block">{score.toFixed(0)}</span>
+                                        <span className={`text-xs ${t.sub} block mb-1`}>Benar: <strong className={t.title}>{correct}</strong> dari {total} soal objektif</span>
+                                        <span className="text-[11px] text-amber-600 dark:text-amber-400 italic font-medium">Soal Uraian dinilai terpisah oleh pengawas di lembar kertas.</span>
+                                    </div>
+                                ) : (
+                                    <div className={`${t.cardInner} p-6 rounded-2xl mb-5`}>
+                                        <i className="fas fa-circle-check text-4xl text-emerald-500 mb-2"></i>
+                                        <p className={`text-sm font-bold ${t.title}`}>Ujian Selesai, Jawaban sudah tersimpan.</p>
+                                    </div>
+                                )}
 
                                 <button
-                                    disabled={isSubmittingGas}
+                                    disabled={isSubmittingGas || !!submitError}
                                     onClick={() => { clearSessionState(); window.location.reload(); }}
                                     className="w-full py-3.5 bg-gradient-to-r from-indigo-600 hover:from-indigo-500 to-violet-600 hover:to-violet-500 disabled:opacity-60 text-white rounded-2xl font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/30 transition"
                                 >
