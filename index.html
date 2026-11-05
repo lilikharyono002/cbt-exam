@@ -70,7 +70,8 @@
 
         const DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbztLyZuduyezaFqLLGK8hkg71lsiVxmrYTLEhteNx8ZCKUCabi8s-EIjYdLSYbXsYSy5g/exec";
         const SESSION_KEY = 'cbt_exam_session_data';
-        const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 menit
+        const SESSION_TIMEOUT = 15 * 60 * 1000; // 15 menit tanpa aktivitas -> kembali ke halaman login
+        const TEACHER_SESSION_KEY = 'cbt_teacher_session';
         const MAX_VIOLATIONS = 3;
         const URAIAN_UNLOCK_RATIO = 0.55;
         const TRANSITION_SECONDS = 60;
@@ -163,7 +164,10 @@
         const saveSessionState = (data) => {
             try { localStorage.setItem(SESSION_KEY, JSON.stringify({ timestamp: Date.now(), data })); } catch (e) {}
         };
-        const clearSessionState = () => { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} };
+        const clearSessionState = () => {
+            try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+            try { sessionStorage.removeItem(TEACHER_SESSION_KEY); } catch (e) {}
+        };
 
         const Logo = ({ className }) => (
             <img
@@ -334,7 +338,6 @@
                     const parsed = JSON.parse(raw);
                     if (parsed.timestamp && (Date.now() - parsed.timestamp < SESSION_TIMEOUT)) {
                         const s = parsed.data;
-                        // Hanya sesi siswa yang dipulihkan. Guru cukup login ulang (password tidak disimpan di browser).
                         if (s && (s.step === 'instructions' || s.step === 'exam') && s.ticket && Array.isArray(s.examQuestions) && s.examQuestions.length > 0) {
                             setRole('siswa');
                             setTicket(s.ticket);
@@ -361,6 +364,73 @@
                     console.error("Gagal membaca sesi tersimpan:", e);
                 }
             }, []);
+
+            // ---------- Sesi guru: bertahan saat refresh (maks. 15 menit tanpa aktivitas) ----------
+            // Disimpan di sessionStorage: hilang otomatis saat tab/browser ditutup.
+            const [teacherRestored, setTeacherRestored] = useState(0);
+            useEffect(() => {
+                try {
+                    const raw = sessionStorage.getItem(TEACHER_SESSION_KEY);
+                    if (!raw) return;
+                    const t = JSON.parse(raw);
+                    if (t && t.pass && t.time && (Date.now() - t.time < SESSION_TIMEOUT)) {
+                        setRole('guru');
+                        setTeacherPass(t.pass);
+                        setSelectedTeacherMapel(t.mapel || '');
+                        if (t.menu) setActiveGuruMenu(t.menu);
+                        setStep('guru_dashboard');
+                        setTeacherRestored(n => n + 1);
+                    } else {
+                        sessionStorage.removeItem(TEACHER_SESSION_KEY);
+                    }
+                } catch (e) {}
+            }, []);
+
+            const saveTeacherSession = (extra) => {
+                try {
+                    const cur = JSON.parse(sessionStorage.getItem(TEACHER_SESSION_KEY) || 'null');
+                    if (!cur) return;
+                    sessionStorage.setItem(TEACHER_SESSION_KEY, JSON.stringify({ ...cur, ...(extra || {}), time: Date.now() }));
+                } catch (e) {}
+            };
+
+            // Simpan posisi dashboard (mapel & menu) + perbarui waktu aktivitas
+            useEffect(() => {
+                if (step !== 'guru_dashboard' || !teacherPass) return;
+                try {
+                    sessionStorage.setItem(TEACHER_SESSION_KEY, JSON.stringify({
+                        pass: teacherPass, mapel: selectedTeacherMapel, menu: activeGuruMenu, time: Date.now()
+                    }));
+                } catch (e) {}
+            }, [step, teacherPass, selectedTeacherMapel, activeGuruMenu]);
+
+            // Setiap klik/ketik/sentuh dihitung sebagai aktivitas
+            useEffect(() => {
+                if (step !== 'guru_dashboard') return;
+                let last = 0;
+                const touch = () => { const n = Date.now(); if (n - last > 5000) { last = n; saveTeacherSession(); } };
+                ['click', 'keydown', 'touchstart'].forEach(ev => window.addEventListener(ev, touch));
+                return () => ['click', 'keydown', 'touchstart'].forEach(ev => window.removeEventListener(ev, touch));
+            }, [step]);
+
+            // Setelah dipulihkan: cek ulang password ke server lalu muat data
+            useEffect(() => {
+                if (!teacherRestored) return;
+                (async () => {
+                    try {
+                        const r = await gasGet({ action: 'loginGuru', pass: teacherPass });
+                        if (r && r.ok) {
+                            fetchResultsFromGas();
+                            fetchBankSoal();
+                            if (selectedTeacherMapel) fetchTokenInfo(selectedTeacherMapel);
+                        } else {
+                            handleLogout();
+                        }
+                    } catch (e) {
+                        setTeacherError("Tidak dapat terhubung ke server. Muat ulang halaman setelah koneksi pulih.");
+                    }
+                })();
+            }, [teacherRestored]);
 
             // ---------- Simpan sesi ----------
             useEffect(() => {
