@@ -26,6 +26,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
     <!-- FontAwesome Icons CDN -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- KaTeX: tampilan rumus matematika (tulis rumus di antara tanda $ ... $) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
     <!-- Google Font Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
@@ -163,6 +166,134 @@
             text: d.text || '', img: formatImageUrl(d.img || '')
         }));
 
+        // ----- Rumus matematika (KaTeX) -----
+        // Tulis rumus di antara tanda $ ... $ (sebaris) atau $$ ... $$ (baris sendiri). Untuk tanda dolar biasa: \$
+        const escapeHtml = (str) => String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const mathToHtml = (text) => {
+            const src = String(text === undefined || text === null ? '' : text);
+            if (!src.includes('$') || !window.katex) return null; // tanpa rumus: tampil sebagai teks biasa
+            let out = '';
+            let i = 0;
+            while (i < src.length) {
+                const ch = src[i];
+                if (ch === '\\' && src[i + 1] === '$') { out += '$'; i += 2; continue; }
+                if (ch === '$') {
+                    const display = src[i + 1] === '$';
+                    const tok = display ? '$$' : '$';
+                    let j = i + tok.length;
+                    let found = -1;
+                    while (j < src.length) {
+                        if (src[j] === '\\') { j += 2; continue; }
+                        if (src.startsWith(tok, j)) { found = j; break; }
+                        j++;
+                    }
+                    if (found > i + tok.length) {
+                        const tex = src.slice(i + tok.length, found);
+                        try {
+                            out += window.katex.renderToString(tex, { displayMode: display, throwOnError: false, output: 'html' });
+                        } catch (e) {
+                            out += escapeHtml(src.slice(i, found + tok.length));
+                        }
+                        i = found + tok.length;
+                        continue;
+                    }
+                }
+                out += escapeHtml(ch);
+                i++;
+            }
+            return out;
+        };
+        const hasMath = (text) => typeof text === 'string' && text.includes('$');
+        const MathText = ({ text, className }) => {
+            const html = mathToHtml(text);
+            if (html === null) return <span className={className} style={{ whiteSpace: 'pre-wrap' }}>{text}</span>;
+            return <span className={className} style={{ whiteSpace: 'pre-wrap' }} dangerouslySetInnerHTML={{ __html: html }} />;
+        };
+
+        const MATH_SNIPPETS = [
+            ['Akar kuadrat', '$\\sqrt{a}$'],
+            ['Akar pangkat n', '$\\sqrt[n]{a}$'],
+            ['Pecahan', '$\\frac{a}{b}$'],
+            ['Pangkat', '$x^{2}$'],
+            ['Indeks', '$x_{1}$'],
+            ['Kali', '$a \\times b$'],
+            ['Bagi', '$a \\div b$'],
+            ['Plus-minus', '$\\pm$'],
+            ['Tidak sama', '$a \\neq b$'],
+            ['Kurang/lebih dari', '$a \\leq b$'],
+            ['Pi', '$\\pi$'],
+            ['Derajat', '$90^\\circ$'],
+            ['Akar dikali akar', '$\\sqrt{a} \\times \\sqrt{b} = \\sqrt{a \\times b}$'],
+            ['Kuadrat jumlah akar', '$\\left(\\sqrt{a}+\\sqrt{b}\\right)^{2} = (a+b)+2\\sqrt{ab}$'],
+            ['Rasionalisasi', '$\\frac{a}{\\sqrt{b}} = \\frac{a\\sqrt{b}}{b}$']
+        ];
+
+        // Palet simbol: klik tombol untuk menyisipkan rumus ke kolom teks yang terakhir diklik
+        const MathPalette = ({ t }) => {
+            const lastField = React.useRef(null);
+            const [hint, setHint] = useState('');
+            useEffect(() => {
+                const onFocus = (e) => {
+                    const el = e.target;
+                    if (el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && el.type === 'text')) && !el.closest('[data-math-palette]')) {
+                        lastField.current = el;
+                    }
+                };
+                document.addEventListener('focusin', onFocus);
+                return () => document.removeEventListener('focusin', onFocus);
+            }, []);
+            const insert = (snippet) => {
+                const el = lastField.current;
+                if (!el || !el.isConnected) { setHint('Klik dulu kolom teks (soal / pilihan jawaban) tempat rumus ingin ditaruh, lalu klik simbol.'); return; }
+                setHint('');
+                const start = el.selectionStart !== null ? el.selectionStart : el.value.length;
+                const end = el.selectionEnd !== null ? el.selectionEnd : el.value.length;
+                const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+                const val = el.value.slice(0, start) + snippet + el.value.slice(end);
+                setter.call(el, val);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                const pos = start + snippet.length;
+                setTimeout(() => { try { el.focus(); el.setSelectionRange(pos, pos); } catch (e) {} }, 0);
+            };
+            return (
+                <details data-math-palette="1" className={`${t.cardInner} rounded-2xl p-3`}>
+                    <summary className="cursor-pointer text-xs font-bold text-indigo-600 dark:text-indigo-300 select-none">
+                        <i className="fas fa-square-root-variable mr-1.5"></i>Simbol &amp; rumus matematika (akar, pecahan, pangkat, dll.)
+                    </summary>
+                    <div className="mt-3 space-y-2.5">
+                        <p className={`text-[11px] ${t.sub} leading-relaxed`}>
+                            Rumus ditulis di antara tanda <strong>$ ... $</strong>. Klik kolom teks, lalu klik tombol di bawah untuk menyisipkan contoh rumus, kemudian ganti huruf a, b, n sesuai soal.
+                            Jangan menyalin rumus dari Microsoft Word (hasilnya akan berubah); ketik atau pakai tombol ini.
+                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {MATH_SNIPPETS.map(([label, snip]) => (
+                                <button key={label} type="button" title={label + '  ' + snip}
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => insert(snip)}
+                                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:border-indigo-500 text-xs text-slate-800 dark:text-slate-100">
+                                    <MathText text={snip} />
+                                </button>
+                            ))}
+                        </div>
+                        {hint && <p className="text-[11px] text-amber-600 dark:text-amber-400">{hint}</p>}
+                        <p className={`text-[11px] ${t.sub} leading-relaxed`}>
+                            Contoh tulisan: <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">Sederhanakan $\sqrt{'{'}12{'}'} + \sqrt{'{'}27{'}'}$</code>. Tanda dolar biasa (misal harga) ditulis <code className="bg-slate-200 dark:bg-slate-800 px-1 rounded">\$</code>.
+                            Rumus yang rumit bisa juga dibuat sebagai gambar (tangkapan layar) lalu dipakai lewat kolom link gambar.
+                        </p>
+                    </div>
+                </details>
+            );
+        };
+
+        // Pratinjau langsung hasil rumus di bawah kolom teks
+        const MathPreview = ({ text, t }) => hasMath(text) ? (
+            <div className="mt-1.5 px-3 py-2 rounded-xl border border-dashed border-indigo-400/60 bg-indigo-50/60 dark:bg-indigo-950/20 text-sm">
+                <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-300 uppercase tracking-wide block mb-0.5">Pratinjau</span>
+                <MathText text={text} className={t.title} />
+            </div>
+        ) : null;
+
         // Teks + gambar (opsional). onZoom: tampilkan tombol perbesar.
         const Vis = ({ text, img, onZoom, imgClass = 'max-h-40' }) => {
             const [broken, setBroken] = useState(false);
@@ -182,7 +313,7 @@
                         </span>
                     )}
                     {url && broken && <span className="text-[11px] text-red-500">(gambar tidak dapat dimuat)</span>}
-                    {text ? <span className="break-words">{text}</span> : null}
+                    {text ? <MathText text={text} className="break-words" /> : null}
                 </span>
             );
         };
@@ -291,7 +422,7 @@
             return (
                 <span className="inline-flex items-center gap-1.5 min-w-0">
                     {url && <img src={url} alt="" className="h-9 max-w-[4.5rem] rounded object-contain bg-white border border-slate-200 dark:border-slate-700" onError={(e) => { e.target.style.display = 'none'; }} />}
-                    {text ? <span className="truncate">{text}</span> : (!url ? <span className="italic text-slate-400">(kosong)</span> : null)}
+                    {text ? (hasMath(text) ? <MathText text={text} /> : <span className="truncate">{text}</span>) : (!url ? <span className="italic text-slate-400">(kosong)</span> : null)}
                 </span>
             );
         };
@@ -1571,6 +1702,8 @@
                                                 </div>
                                             )}
 
+                                            <MathPalette t={t} />
+
                                             {selectedTypeInput !== 'menjodohkan' && (
                                                 <React.Fragment>
                                                     <div>
@@ -1582,6 +1715,7 @@
                                                             value={formQuestion.question}
                                                             onChange={(e) => setFormQuestion({ ...formQuestion, question: e.target.value })}
                                                         ></textarea>
+                                                        <MathPreview text={formQuestion.question} t={t} />
                                                     </div>
                                                     <div>
                                                         <label className={`block text-xs ${t.label} mb-1.5 flex items-center justify-between`}>
@@ -1729,7 +1863,7 @@
                                                         <span className="px-2.5 py-0.5 bg-violet-50 dark:bg-violet-950/80 text-violet-700 dark:text-violet-300 text-[10px] font-bold rounded-lg border border-violet-200 dark:border-violet-500/30 uppercase">{TYPE_LABELS[q.type || 'pilihan_ganda']}</span>
                                                     </div>
 
-                                                    <p className={`text-xs font-semibold ${t.title} mb-2 leading-relaxed`}>{idx + 1}. {q.question}</p>
+                                                    <p className={`text-xs font-semibold ${t.title} mb-2 leading-relaxed`}>{idx + 1}. <MathText text={q.question} /></p>
 
                                                     {q.imageUrl && (
                                                         <div className="mb-3 max-w-xs rounded-xl overflow-hidden border border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-950 p-1.5">
@@ -2014,11 +2148,14 @@
                                         </span>
                                     </div>
 
+                                    <MathPalette t={t} />
+
                                     {editingQuestion.type !== 'menjodohkan' && (
                                         <React.Fragment>
                                             <div>
                                                 <label className={`block text-xs ${t.label} mb-1`}>Teks Pertanyaan / Soal</label>
                                                 <textarea rows="3" className={`w-full ${t.input} rounded-xl p-3 text-xs transition`} value={editingQuestion.question || ''} onChange={(e) => setEditingQuestion({ ...editingQuestion, question: e.target.value })}></textarea>
+                                                <MathPreview text={editingQuestion.question} t={t} />
                                             </div>
                                             <div>
                                                 <label className={`block text-xs ${t.label} mb-1`}>URL Gambar Soal (Opsional)</label>
@@ -2145,7 +2282,7 @@
                                                             <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/80 px-3 py-1 rounded-lg border border-indigo-200 dark:border-indigo-500/30">Soal {idx + 1} dari {bankQuestions.length}</span>
                                                             <span className="text-[10px] font-bold text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-950/80 px-2.5 py-1 rounded-lg border border-violet-200 dark:border-violet-500/30 uppercase">{TYPE_LABELS[cq.type || 'pilihan_ganda']}</span>
                                                         </div>
-                                                        <p className={`text-sm font-semibold ${t.title} mb-4 leading-relaxed`}>{cq.question}</p>
+                                                        <p className={`text-sm font-semibold ${t.title} mb-4 leading-relaxed`}><MathText text={cq.question} /></p>
                                                         {cq.imageUrl && (
                                                             <div className="mb-4 max-w-md mx-auto text-center bg-white dark:bg-slate-950 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
                                                                 <img src={formatImageUrl(cq.imageUrl)} alt="Preview Soal" className="zoomable max-h-48 w-full object-contain rounded-lg cursor-pointer" onClick={() => setZoomedImage(formatImageUrl(cq.imageUrl))} onError={(e) => { e.target.style.display = 'none'; }} />
@@ -2364,7 +2501,7 @@
                                 </div>
 
                                 <div className="flex-1">
-                                    <p className={`text-sm sm:text-base font-semibold ${t.title} mb-4 leading-relaxed whitespace-pre-wrap`}>{currentQ.question}</p>
+                                    <p className={`text-sm sm:text-base font-semibold ${t.title} mb-4 leading-relaxed`}><MathText text={currentQ.question} /></p>
 
                                     {currentQ.imageUrl && (
                                         <div className="mb-4 max-w-md bg-white dark:bg-slate-950 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
@@ -2434,7 +2571,7 @@
                                                             >
                                                                 <option value="" className={t.optBg}>-- Pilih jawaban --</option>
                                                                 {rightOptions.map((r, rIdx) => (
-                                                                    <option key={rIdx} value={String(rIdx)} className={t.optBg}>{letterOf(rIdx)}{r.text ? '. ' + (r.text.length > 40 ? r.text.slice(0, 40) + '…' : r.text) : (r.img ? '. (gambar)' : '')}</option>
+                                                                    <option key={rIdx} value={String(rIdx)} className={t.optBg}>{letterOf(rIdx)}{r.text ? (hasMath(r.text) ? '. (rumus)' : '. ' + (r.text.length > 40 ? r.text.slice(0, 40) + '…' : r.text)) : (r.img ? '. (gambar)' : '')}</option>
                                                                 ))}
                                                             </select>
                                                         </div>
